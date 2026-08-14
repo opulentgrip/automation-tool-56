@@ -1,42 +1,24 @@
+import json
 import re
 
-class ValidationError(Exception):
-    pass
+def is_valid_crypto_address(address: str, network: str) -> bool:
+    patterns = {
+        'bitcoin': r'^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$',
+        'ethereum': r'^0x[a-fA-F0-9]{40}$',
+        'litecoin': r'^[LM3][a-zA-Z0-9]{26,33}$'
+    }
+    pattern = patterns.get(network)
+    if not pattern:
+        raise ValueError(f'Unsupported network: {network}')  
+    return bool(re.match(pattern, address))
 
-class EmailValidator:
-    def __init__(self):
-        self.email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+def parse_crypto_data(data: str) -> dict:
+    try:
+        return json.loads(data)
+    except json.JSONDecodeError:
+        raise ValueError('Invalid JSON data')
 
-    def validate(self, email):
-        if not isinstance(email, str):
-            raise ValidationError('Email must be a string')
-        if not re.match(self.email_pattern, email):
-            raise ValidationError('Invalid email format')
-        return True
-
-class AgeValidator:
-    def validate(self, age):
-        if not isinstance(age, int):
-            raise ValidationError('Age must be an integer')
-        if age < 0 or age > 120:
-            raise ValidationError('Age must be between 0 and 120')
-        return True
-
-class RegistrationValidator:
-    def __init__(self):
-        self.email_validator = EmailValidator()
-        self.age_validator = AgeValidator()
-
-    def validate(self, email, age):
-        try:
-            self.email_validator.validate(email)
-            self.age_validator.validate(age)
-        except ValidationError as e:
-            return str(e)
-        return 'Validation successful'
-
+# Example usage
 if __name__ == '__main__':
-    validator = RegistrationValidator()
-    print(validator.validate('test@example.com', 25))
-    print(validator.validate('invalid-email', 25))
-    print(validator.validate('test@example.com', -5))
+    print(is_valid_crypto_address('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', 'bitcoin'))
+    print(parse_crypto_data('{"key": "value"}'))
