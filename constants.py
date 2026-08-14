@@ -1,0 +1,15 @@
+MAX_BLOCK_SIZE = 1048576
+TRANSACTION_FEE = 0.0001
+DEFAULT_CURRENCY = 'USD'
+MIN_CONFIRMATIONS = 6
+COIN_SYMBOL = 'BTC'
+API_URL = 'https://api.crypto.com/v1/'
+SUPPORT_EMAIL = 'support@crypto.com'
+SUPPORTED_ALGORITHMS = ['SHA256', 'Scrypt', 'Ethash']
+NETWORK_NODES = ['node1.crypto.com', 'node2.crypto.com', 'node3.crypto.com']
+EXCHANGE_LIST = ['binance', 'coinbase', 'kraken', 'gemini']
+FEE_STRUCTURE = {'low': 0.001, 'medium': 0.005, 'high': 0.01}
+LOGGING_LEVEL = 'DEBUG'
+TIMEOUT_SECONDS = 30
+RETRY_ATTEMPTS = 5
+SLEEP_BETWEEN_RETRIES = 2
