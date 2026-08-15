@@ -1,15 +1,28 @@
-MAX_BLOCK_SIZE = 1048576
-TRANSACTION_FEE = 0.0001
-DEFAULT_CURRENCY = 'USD'
-MIN_CONFIRMATIONS = 6
-COIN_SYMBOL = 'BTC'
-API_URL = 'https://api.crypto.com/v1/'
-SUPPORT_EMAIL = 'support@crypto.com'
-SUPPORTED_ALGORITHMS = ['SHA256', 'Scrypt', 'Ethash']
-NETWORK_NODES = ['node1.crypto.com', 'node2.crypto.com', 'node3.crypto.com']
-EXCHANGE_LIST = ['binance', 'coinbase', 'kraken', 'gemini']
-FEE_STRUCTURE = {'low': 0.001, 'medium': 0.005, 'high': 0.01}
-LOGGING_LEVEL = 'DEBUG'
-TIMEOUT_SECONDS = 30
-RETRY_ATTEMPTS = 5
-SLEEP_BETWEEN_RETRIES = 2
+class CryptoConstants:
+    COINS = [
+        'BTC',
+        'ETH',
+        'XRP',
+        'LTC',
+        'BCH',
+    ]
+    SUPPORTED_EXCHANGES = [
+        'Binance',
+        'Coinbase',
+        'Kraken',
+        'Bitfinex',
+    ]
+    API_KEY_ENV_VAR = 'CRYPTO_API_KEY'
+    API_URL = 'https://api.crypto.com/v1/'
+    DEFAULT_TIMEOUT = 30
+    ERROR_MESSAGES = {
+        'network_error': 'Failed to connect to the network.',
+        'invalid_coin': 'The specified coin is not supported.',
+        'api_error': 'Error retrieved from the API.',
+    }
+    @staticmethod
+    def get_coin_list():
+        return ', '.join(CryptoConstants.COINS)
+    @staticmethod
+    def get_supported_exchanges():
+        return ', '.join(CryptoConstants.SUPPORTED_EXCHANGES)
