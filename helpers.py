@@ -1,53 +1,54 @@
 from typing import List, Dict, Any
 
 
-def filter_dict_keys(data: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
+def calculate_average_price(prices: List[float]) -> float:
     """
-    Filters a dictionary, returning a new dictionary with only the specified keys.
+    Calculate the average price from a list of prices.
 
     Args:
-        data (Dict[str, Any]): The original dictionary to filter.
-        keys (List[str]): A list of keys to retain in the new dictionary.
+        prices (List[float]): A list containing price values.
 
     Returns:
-        Dict[str, Any]: A new dictionary containing only the specified keys.
+        float: The average price, or 0 if the list is empty.
     """
-    return {key: data[key] for key in keys if key in data}
+    return sum(prices) / len(prices) if prices else 0.0
 
 
-def merge_dicts(dict1: Dict[str, Any], dict2: Dict[str, Any]) -> Dict[str, Any]:
+def create_transaction_data(
+    transaction_id: str, 
+    amount: float, 
+    currency: str, 
+    metadata: Dict[str, Any] = None
+) -> Dict[str, Any]:
     """
-    Merges two dictionaries into one. If a key exists in both,
-    the value from the second dictionary will be used.
+    Create a structured transaction data dictionary.
 
     Args:
-        dict1 (Dict[str, Any]): The first dictionary.
-        dict2 (Dict[str, Any]): The second dictionary.
+        transaction_id (str): The unique identifier for the transaction.
+        amount (float): The amount of currency involved in the transaction.
+        currency (str): The currency type of the transaction.
+        metadata (Dict[str, Any], optional): Additional metadata related to the transaction.
 
     Returns:
-        Dict[str, Any]: A new dictionary with merged key-value pairs.
+        Dict[str, Any]: A dictionary containing structured transaction data.
     """
-    merged = dict1.copy()
-    merged.update(dict2)
-    return merged
+    return {
+        'transaction_id': transaction_id,
+        'amount': amount,
+        'currency': currency,
+        'metadata': metadata or {},
+    }
 
 
-def get_nested_value(data: Dict[str, Any], keys: List[str], default: Any = None) -> Any:
+def filter_transactions_by_currency(transactions: List[Dict[str, Any]], currency: str) -> List[Dict[str, Any]]:
     """
-    Retrieves a value from a nested dictionary using a list of keys.
-    If any key is not found, returns the specified default value.
+    Filter a list of transactions to include only those matching the specified currency.
 
     Args:
-        data (Dict[str, Any]): The nested dictionary.
-        keys (List[str]): A list of keys to traverse.
-        default (Any): The value to return if the keys are not found.
+        transactions (List[Dict[str, Any]]): A list of transaction dictionaries.
+        currency (str): The currency type to filter by.
 
     Returns:
-        Any: The retrieved value or the default value.
+        List[Dict[str, Any]]: A filtered list of transactions.
     """
-    for key in keys:
-        if isinstance(data, dict) and key in data:
-            data = data[key]
-        else:
-            return default
-    return data
+    return [tx for tx in transactions if tx['currency'] == currency]
