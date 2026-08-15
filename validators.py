@@ -1,24 +1,30 @@
-import json
 import re
 
-def is_valid_crypto_address(address: str, network: str) -> bool:
-    patterns = {
-        'bitcoin': r'^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$',
-        'ethereum': r'^0x[a-fA-F0-9]{40}$',
-        'litecoin': r'^[LM3][a-zA-Z0-9]{26,33}$'
-    }
-    pattern = patterns.get(network)
-    if not pattern:
-        raise ValueError(f'Unsupported network: {network}')  
-    return bool(re.match(pattern, address))
+class ValidationError(Exception):
+    pass
 
-def parse_crypto_data(data: str) -> dict:
-    try:
-        return json.loads(data)
-    except json.JSONDecodeError:
-        raise ValueError('Invalid JSON data')
+class CryptoValidator:
+    @staticmethod
+    def validate_address(address: str, currency: str) -> None:
+        if currency == 'bitcoin':
+            if not re.match(r'^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$', address):
+                raise ValidationError('Invalid Bitcoin address')
+        elif currency == 'ethereum':
+            if not re.match(r'^0x[a-fA-F0-9]{40}$', address):
+                raise ValidationError('Invalid Ethereum address')
+        else:
+            raise ValidationError('Unsupported currency')
 
-# Example usage
-if __name__ == '__main__':
-    print(is_valid_crypto_address('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', 'bitcoin'))
-    print(parse_crypto_data('{"key": "value"}'))
+    @staticmethod
+    def validate_amount(amount: float) -> None:
+        if amount <= 0:
+            raise ValidationError('Amount must be greater than zero')
+
+    @staticmethod
+    def validate_transaction(address: str, amount: float, currency: str) -> None:
+        try:
+            CryptoValidator.validate_address(address, currency)
+            CryptoValidator.validate_amount(amount)
+        except ValidationError as e:
+            print(f'Validation error: {e}')  
+            raise
