@@ -1,54 +1,30 @@
-from typing import List, Dict, Any
+import json
+import requests
+
+def fetch_crypto_data(symbol):
+    url = f'https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd'
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        print(f'Error fetching data: {e}')  # Consider logging instead
 
 
-def calculate_average_price(prices: List[float]) -> float:
-    """
-    Calculate the average price from a list of prices.
-
-    Args:
-        prices (List[float]): A list containing price values.
-
-    Returns:
-        float: The average price, or 0 if the list is empty.
-    """
-    return sum(prices) / len(prices) if prices else 0.0
+def format_price_data(data):
+    try:
+        symbol = list(data.keys())[0]
+        price = data[symbol]['usd']
+        return f'The current price of {symbol} is ${price}'
+    except (KeyError, IndexError) as e:
+        print(f'Error formatting price data: {e}')  # Consider logging instead
 
 
-def create_transaction_data(
-    transaction_id: str, 
-    amount: float, 
-    currency: str, 
-    metadata: Dict[str, Any] = None
-) -> Dict[str, Any]:
-    """
-    Create a structured transaction data dictionary.
-
-    Args:
-        transaction_id (str): The unique identifier for the transaction.
-        amount (float): The amount of currency involved in the transaction.
-        currency (str): The currency type of the transaction.
-        metadata (Dict[str, Any], optional): Additional metadata related to the transaction.
-
-    Returns:
-        Dict[str, Any]: A dictionary containing structured transaction data.
-    """
-    return {
-        'transaction_id': transaction_id,
-        'amount': amount,
-        'currency': currency,
-        'metadata': metadata or {},
-    }
+def save_data_to_file(data, filename):
+    with open(filename, 'w') as f:
+        json.dump(data, f, indent=4)
 
 
-def filter_transactions_by_currency(transactions: List[Dict[str, Any]], currency: str) -> List[Dict[str, Any]]:
-    """
-    Filter a list of transactions to include only those matching the specified currency.
-
-    Args:
-        transactions (List[Dict[str, Any]]): A list of transaction dictionaries.
-        currency (str): The currency type to filter by.
-
-    Returns:
-        List[Dict[str, Any]]: A filtered list of transactions.
-    """
-    return [tx for tx in transactions if tx['currency'] == currency]
+def load_data_from_file(filename):
+    with open(filename, 'r') as f:
+        return json.load(f)
