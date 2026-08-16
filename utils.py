@@ -1,36 +1,19 @@
 import time
 import requests
-from functools import wraps
+from requests.exceptions import RequestException
 
-
-def retry(max_attempts=3, delay=1):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            attempts = 0
-            while attempts < max_attempts:
-                try:
-                    return func(*args, **kwargs)
-                except requests.RequestException as e:
-                    attempts += 1
-                    if attempts == max_attempts:
-                        raise e
-                    time.sleep(delay)
-        return wrapper
-    return decorator
-
-
-@retry(max_attempts=5, delay=2)
-def fetch_data(url):
-    response = requests.get(url)
-    response.raise_for_status()
-    return response.json()
-
-
-def main():
-    data = fetch_data('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd')
-    print(data)
-
-
-if __name__ == '__main__':
-    main()
+def retry_request(url, max_retries=3, delay=1):
+    attempts = 0
+    while attempts < max_retries:
+        try:
+            response = requests.get(url)
+            response.raise_for_status()  # Raise an error for bad responses
+            return response.json()  # Assuming JSON response
+        except RequestException as e:
+            attempts += 1
+            print(f'Error fetching {url}: {e}. Attempt {attempts}/{max_retries}')
+            if attempts < max_retries:
+                time.sleep(delay)  # Wait before retrying
+            else:
+                print('Max retries reached. Exiting.')  
+                raise
