@@ -1,31 +1,21 @@
 import logging
+from logging.handlers import RotatingFileHandler
 
-class CryptoLogger:
-    def __init__(self, name='CryptoBot'):
-        self.logger = logging.getLogger(name)
+class LogSetup:
+    def __init__(self, log_file='app.log', max_bytes=10 * 1024 * 1024, backup_count=5):
+        self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
-        handler = logging.FileHandler('crypto.log')
+        handler = RotatingFileHandler(log_file, maxBytes=max_bytes, backupCount=backup_count)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
 
-    def debug(self, message):
-        self.logger.debug(message)
+    def get_logger(self):
+        return self.logger
 
-    def info(self, message):
-        self.logger.info(message)
-
-    def warning(self, message):
-        self.logger.warning(message)
-
-    def error(self, message):
-        self.logger.error(message)
-
-    def critical(self, message):
-        self.logger.critical(message)
-
-# Example usage
 if __name__ == '__main__':
-    crypto_logger = CryptoLogger()
-    crypto_logger.info('This is an information log for crypto operations.')
-    crypto_logger.error('This is an error log for crypto transactions.')
+    log_setup = LogSetup()
+    logger = log_setup.get_logger()
+    logger.info('Logger setup with rotation')
+    logger.error('This is an error message')
+    logger.debug('Debugging information')
