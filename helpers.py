@@ -1,45 +1,28 @@
-import logging
+import json
 import requests
-from requests.exceptions import RequestException
 
-logger = logging.getLogger(__name__)
-
-def fetch_data(url):
-    try:
+class CryptoHelper:
+    @staticmethod
+    def fetch_price(symbol):
+        url = f'https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd'
         response = requests.get(url)
-        response.raise_for_status()
-        return response.json()
-    except RequestException as err:
-        logger.error(f"Request failed: {err}")
-        return None
-    except ValueError:
-        logger.error("Failed to parse JSON from response.")
-        return None
-    except Exception as e:
-        logger.error(f"An unexpected error occurred: {e}")
+        if response.status_code == 200:
+            return response.json().get(symbol, {}).get('usd')
         return None
 
+    @staticmethod
+    def save_to_file(filename, data):
+        with open(filename, 'w') as f:
+            json.dump(data, f, indent=4)
 
-def process_data(data):
-    if not data:
-        logger.warning("No data to process.")
-        return None
-    try:
-        # Example process: summing a list of numbers
-        total = sum(data) if isinstance(data, list) else 0
-        return total
-    except TypeError as e:
-        logger.error(f"Type error during processing: {e}")
-        return None
-    except Exception as e:
-        logger.error(f"An unexpected error occurred in processing: {e}")
-        return None
+    @staticmethod
+    def read_from_file(filename):
+        try:
+            with open(filename, 'r') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return None
 
-
-def main(url):
-    raw_data = fetch_data(url)
-    result = process_data(raw_data)
-    if result is not None:
-        logger.info(f"Processed result: {result}")
-    else:
-        logger.info("Processing failed or returned no result.")
+    @staticmethod
+    def format_transaction(transaction):
+        return f'Transaction: {transaction[
