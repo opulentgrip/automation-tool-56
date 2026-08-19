@@ -1,21 +1,31 @@
 import logging
-from logging.handlers import RotatingFileHandler
 
-class LogSetup:
-    def __init__(self, log_file='app.log', max_bytes=10 * 1024 * 1024, backup_count=5):
-        self.logger = logging.getLogger(__name__)
+class CustomLogger:
+    def __init__(self, name):
+        self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.DEBUG)
-        handler = RotatingFileHandler(log_file, maxBytes=max_bytes, backupCount=backup_count)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+        ch = logging.StreamHandler()
+        ch.setFormatter(formatter)
+        self.logger.addHandler(ch)
 
-    def get_logger(self):
-        return self.logger
+    def debug(self, message):
+        self._log_with_error_handling(self.logger.debug, message)
 
-if __name__ == '__main__':
-    log_setup = LogSetup()
-    logger = log_setup.get_logger()
-    logger.info('Logger setup with rotation')
-    logger.error('This is an error message')
-    logger.debug('Debugging information')
+    def info(self, message):
+        self._log_with_error_handling(self.logger.info, message)
+
+    def warning(self, message):
+        self._log_with_error_handling(self.logger.warning, message)
+
+    def error(self, message):
+        self._log_with_error_handling(self.logger.error, message)
+
+    def critical(self, message):
+        self._log_with_error_handling(self.logger.critical, message)
+
+    def _log_with_error_handling(self, log_method, message):
+        try:
+            log_method(message)
+        except Exception as e:
+            self.logger.error(f'Logging failed: {e}')
