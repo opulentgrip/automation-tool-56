@@ -1,34 +1,31 @@
+import json
 import requests
-import time
-import random
+from concurrent.futures import ThreadPoolExecutor
 
-class NetworkError(Exception):
-    pass
+class CryptoProcessor:
+    def __init__(self, api_url):
+        self.api_url = api_url
 
-class NetworkRequest:
-    def __init__(self, retries=3, delay=2):
-        self.retries = retries
-        self.delay = delay
+    def fetch_data(self, coin):
+        response = requests.get(f'{self.api_url}/{coin}')
+        return response.json() if response.status_code == 200 else None
 
-    def fetch(self, url):
-        for attempt in range(self.retries):
-            try:
-                response = requests.get(url)
-                response.raise_for_status()  # Raise an error for bad status
-                return response.json()
-            except requests.RequestException as e:
-                if attempt < self.retries - 1:
-                    wait_time = self.delay + random.uniform(0, 1)
-                    print(f"Attempt {attempt + 1} failed: {e}, retrying in {wait_time:.2f} seconds...")
-                    time.sleep(wait_time)
-                else:
-                    raise NetworkError(f"All attempts failed: {e}")
+    def process_coins(self, coins):
+        results = []
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_coin = {executor.submit(self.fetch_data, coin): coin for coin in coins}
+            for future in future_to_coin:
+                coin = future_to_coin[future]
+                try:
+                    result = future.result()
+                    if result:
+                        results.append({coin: result})
+                except Exception as e:
+                    print(f'Error fetching {coin}: {e}')  
+        return results
 
-# Example usage
 if __name__ == '__main__':
-    requester = NetworkRequest(retries=5, delay=1)
-    try:
-        data = requester.fetch('https://api.example.com/data')
-        print(data)
-    except NetworkError as ne:
-        print(str(ne))
+    processor = CryptoProcessor('https://api.coingecko.com/api/v3/simple/price')
+    coins = ['bitcoin', 'ethereum', 'dogecoin']
+    data = processor.process_coins(coins)
+    print(json.dumps(data, indent=2))
