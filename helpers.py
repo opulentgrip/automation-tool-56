@@ -1,34 +1,28 @@
+import hashlib
+import hmac
 import time
-import functools
-import logging
+from typing import Dict, Any, Union
 
-logger = logging.getLogger('automation-tool-56')
+def sign_payload(secret: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    timestamp = str(int(time.time() * 1000))
+    query_string = '&'.join([f"{k}={v}" for k, v in sorted(payload.items())])
+    full_payload = f"{timestamp}?{query_string}"
+    signature = hmac.new(
+        secret.encode('utf-8'),
+        full_payload.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    return {
+        **payload,
+        'timestamp': timestamp,
+        'signature': signature
+    }
 
-def network_retry(max_attempts=3, delay=2, backoff=2):
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            current_delay = delay
-            for attempt in range(1, max_attempts + 1):
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    if attempt == max_attempts:
-                        logger.critical(f"All {max_attempts} crypto-node attempts failed for {func.__name__}")
-                        raise
-                    logger.warning(f"Node hiccup on {func.__name__} (attempt {attempt}/{max_attempts}): {e}. Retrying in {current_delay}s...")
-                    time.sleep(current_delay)
-                    current_delay *= backoff
-        return wrapper
-    return decorator
+def satoshi_to_btc(satoshi: Union[int, str]) -> float:
+    return int(satoshi) / 100000000.0
 
-class ChainPulse:
-    def __init__(self, endpoint: str):
-        self.endpoint = endpoint
-    
-    @network_retry(max_attempts=4, delay=1, backoff=3)
-    def fetch_gas_price(self) -> int:
-        import random
-        if random.random() < 0.7:
-            raise ConnectionError("RPC node timeout")
-        return int(random.uniform(15, 50) * 10**9)
+def btc_to_satoshi(btc: Union[float, str]) -> int:
+    return int(float(btc) * 100000000)
+
+def sanitize_symbol(symbol: str) -> str:
+    return symbol.upper().replace('/', '').replace('-', '')
