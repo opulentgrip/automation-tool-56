@@ -1,28 +1,31 @@
+import os
 import logging
+from logging.handlers import RotatingFileHandler
 
-class CryptoLogger:
-    def __init__(self, name='CryptoLogger'):
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.DEBUG)
-        handler = logging.FileHandler('crypto.log')
-        handler.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+CRYPTO_LOG_FORMAT = '%(asctime)s | ₿ | %(levelname)s | [%(filename)s:%(lineno)d] - %(message)s'
 
-    def debug(self, message):
-        self.logger.debug(message)
+def setup_crypto_logger(name: str = 'automation_tool_56', log_file: str = 'crypto_ops.log') -> logging.Logger:
+    logger = logging.getLogger(name)
+    if logger.handlers:
+        return logger
+        
+    logger.setLevel(logging.DEBUG)
+    
+    os.makedirs(os.path.dirname(log_file) if os.path.dirname(log_file) else '.', exist_ok=True)
+    
+    file_handler = RotatingFileHandler(log_file, maxBytes=5 * 1024 * 1024, backupCount=3)
+    file_handler.setLevel(logging.INFO)
+    file_formatter = logging.Formatter(CRYPTO_LOG_FORMAT)
+    file_handler.setFormatter(file_formatter)
+    
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.DEBUG)
+    stream_formatter = logging.Formatter(CRYPTO_LOG_FORMAT)
+    stream_handler.setFormatter(stream_formatter)
+    
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+    
+    return logger
 
-    def info(self, message):
-        self.logger.info(message)
-
-    def warning(self, message):
-        self.logger.warning(message)
-
-    def error(self, message):
-        self.logger.error(message)
-
-    def critical(self, message):
-        self.logger.critical(message)
-
-crypto_logger = CryptoLogger()
+logger = setup_crypto_logger()
