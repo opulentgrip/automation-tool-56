@@ -1,59 +1,34 @@
 import time
-from functools import wraps
-from collections import defaultdict
+import functools
+import logging
 
-def crypto_performance_cache(max_size=128):
+logger = logging.getLogger('automation-tool-56')
+
+def network_retry(max_attempts=3, delay=2, backoff=2):
     def decorator(func):
-        cache = {}
-        access_order = []
-        @wraps(func)
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            key = (args, tuple(sorted(kwargs.items())))
-            if key in cache:
-                access_order.remove(key)
-                access_order.append(key)
-                return cache[key]
-            result = func(*args, **kwargs)
-            if len(cache) >= max_size:
-                oldest = access_order.pop(0)
-                del cache[oldest]
-            cache[key] = result
-            access_order.append(key)
-            return result
+            current_delay = delay
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if attempt == max_attempts:
+                        logger.critical(f"All {max_attempts} crypto-node attempts failed for {func.__name__}")
+                        raise
+                    logger.warning(f"Node hiccup on {func.__name__} (attempt {attempt}/{max_attempts}): {e}. Retrying in {current_delay}s...")
+                    time.sleep(current_delay)
+                    current_delay *= backoff
         return wrapper
     return decorator
 
-@crypto_performance_cache(max_size=100)
-def expensive_crypto_op(block_data: str) -> int:
-    time.sleep(0.01)
-    return sum(ord(c) for c in block_data) % 10000
-
-def process_crypto_batch(data_list: list) -> dict:
-    results = defaultdict(int)
-    for item in data_list:
-        key = item.get('key', 'default')
-        value = item.get('value', 0)
-        results[key] += value & 0xFFFFFFFF
-    return dict(results)
-
-class OptimizedCryptoProcessor:
-    __slots__ = ['_cache', '_stats']
-    def __init__(self):
-        self._cache = {}
-        self._stats = {'hits': 0, 'misses': 0}
-    def get_optimized_value(self, address: str, amount: float) -> float:
-        if address in self._cache:
-            self._stats['hits'] += 1
-            return self._cache[address]
-        self._stats['misses'] += 1
-        optimized = amount * 1.01
-        self._cache[address] = optimized
-        return optimized
-    def get_stats(self) -> dict:
-        return self._stats.copy()
-
-if __name__ == "__main__":
-    proc = OptimizedCryptoProcessor()
-    print(proc.get_optimized_value("0x123", 50.0))
-    print(expensive_crypto_op("testblock"))
-    print(process_crypto_batch([{"key": "btc", "value": 100}]))
+class ChainPulse:
+    def __init__(self, endpoint: str):
+        self.endpoint = endpoint
+    
+    @network_retry(max_attempts=4, delay=1, backoff=3)
+    def fetch_gas_price(self) -> int:
+        import random
+        if random.random() < 0.7:
+            raise ConnectionError("RPC node timeout")
+        return int(random.uniform(15, 50) * 10**9)
