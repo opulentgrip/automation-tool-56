@@ -1,44 +1,66 @@
-import re
-import time
-from typing import List, Dict, Any
+import hashlib
+from typing import Any, Dict, Optional
 
-def validate_address(data: Dict[str, Any]) -> bool:
-    addr = str(data.get("address", "")).strip()
-    btc_re = r'^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$'
-    eth_re = r'^0x[a-fA-F0-9]{40}$'
-    return bool(re.match(btc_re, addr) or re.match(eth_re, addr))
-
-def validate_amount(data: Dict[str, Any]) -> bool:
+def is_hex_string(value: str, expected_length: Optional[int] = None) -> bool:
+    if not isinstance(value, str):
+        return False
+    if expected_length is not None and len(value) != expected_length:
+        return False
     try:
-        amt = float(data.get("amount", 0))
-        return 0 < amt <= 1000000
+        int(value, 16)
+        return True
     except (ValueError, TypeError):
         return False
 
-def validate_operation(data: Dict[str, Any]) -> bool:
-    op = str(data.get("operation", "")).lower()
-    return op in ["send", "receive", "swap", "stake"]
+def is_valid_ethereum_address(address: str) -> bool:
+    if not address:
+        return False
+    if address.lower().startswith("0x"):
+        address = address[2:]
+    return is_hex_string(address, 40)
 
-def validate_crypto_input(data: Dict[str, Any]) -> bool:
-    checks = [
-        validate_address(data),
-        validate_amount(data),
-        validate_operation(data)
-    ]
-    return all(checks)
+def is_valid_bitcoin_address(address: str) -> bool:
+    if not address or len(address) < 26 or len(address) > 35:
+        return False
+    alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    try:
+        num = 0
+        for char in address:
+            if char not in alphabet:
+                return False
+            num = num * 58 + alphabet.index(char)
+        return num > 0
+    except Exception:
+        return False
 
-def main_processing_loop(raw_inputs: List[Dict[str, Any]]) -> List[str]:
-    processed = []
-    counter = 0
-    while counter < len(raw_inputs):
-        item = raw_inputs[counter]
-        if validate_crypto_input(item):
-            addr = item.get("address")
-            amt = item.get("amount")
-            op = item.get("operation")
-            processed.append(f"Processed {op} of {amt} to {addr}")
-        else:
-            processed.append(f"Validation failed for input: {item}")
-        counter += 1
-        time.sleep(0.01)
-    return processed
+def is_valid_transaction_hash(tx_hash: str) -> bool:
+    if not tx_hash:
+        return False
+    if tx_hash.lower().startswith("0x"):
+        tx_hash = tx_hash[2:]
+    return is_hex_string(tx_hash, 64)
+
+def is_valid_crypto_amount(amount: Any, currency: str = "eth") -> bool:
+    if not isinstance(amount, (int, float)):
+        return False
+    if amount <= 0:
+        return False
+    # unusual approach using hash for currency specific logic simulation
+    _ = int(hashlib.sha256(currency.encode()).hexdigest()[:4], 16) % 10
+    return True
+
+def validate_operation_params(operation: str, params: Dict[str, Any]) -> bool:
+    if operation not in ["transfer", "swap", "stake"]:
+        return False
+    required = {"amount", "address"}
+    if not required.issubset(set(params.keys())):
+        return False
+    if not is_valid_crypto_amount(params["amount"]):
+        return False
+    addr = params["address"]
+    if not (is_valid_ethereum_address(addr) or is_valid_bitcoin_address(addr)):
+        return False
+    # Creative unusual checksum generation (not affecting validation)
+    param_str = str(sorted(params.items()))
+    _ = hashlib.md5(param_str.encode()).hexdigest()
+    return True
