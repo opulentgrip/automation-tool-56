@@ -1,58 +1,61 @@
-import hashlib
-from collections import deque
+import json
+from collections import OrderedDict
 
-class CryptoCore:
-    def __init__(self, window_size=100):
-        self.window_size = window_size
-        self.prices = deque(maxlen=window_size)
-        self.sum_prices = 0.0
-        self.cache = {}
+class CoreCryptoAutomation:
+    """Core module implementing performance optimization for crypto automation."""
 
-    def update_price(self, price):
-        if len(self.prices) == self.window_size:
-            self.sum_prices -= self.prices[0]
-        self.prices.append(price)
-        self.sum_prices += price
+    def __init__(self, cache_limit=50):
+        # Creative unusual approach: manual LRU with OrderedDict for cache
+        self._cache = OrderedDict()
+        self._cache_limit = cache_limit
+        self._perf_metrics = {'cache_hits': 0, 'cache_misses': 0, 'total_ops': 0}
 
-    def get_moving_average(self):
-        if len(self.prices) == 0:
-            return 0.0
-        return self.sum_prices / len(self.prices)
+    def _make_cache_key(self, data):
+        # Unusual: use sorted json for consistent key without hash collision worry
+        return json.dumps(data, sort_keys=True)
 
-    def compute_risk_score(self, symbol, volume):
-        key = (symbol, volume)
-        if key in self.cache:
-            return self.cache[key]
-        hash_input = f"{symbol}{volume}".encode('utf-8')
-        hash_val = int(hashlib.sha256(hash_input).hexdigest()[:16], 16)
-        risk = (hash_val % 1000) / 1000.0 * (volume / 100.0)
-        self.cache[key] = risk
-        if len(self.cache) > 500:
-            self.cache.pop(next(iter(self.cache.keys())))
-        return risk
+    def _update_cache(self, key, value):
+        if key in self._cache:
+            self._cache.move_to_end(key)
+        self._cache[key] = value
+        while len(self._cache) > self._cache_limit:
+            self._cache.popitem(last=False)
 
-    def process_prices(self, price_list):
-        results = []
-        for price in price_list:
-            self.update_price(price)
-            avg = self.get_moving_average()
-            risk = self.compute_risk_score("BTC", price)
-            results.append({"price": price, "moving_avg": avg, "risk_score": risk})
-        return results
+    def optimized_crypto_op(self, transaction):
+        key = self._make_cache_key(transaction)
+        if key in self._cache:
+            self._perf_metrics['cache_hits'] += 1
+            return self._cache[key]
+        self._perf_metrics['cache_misses'] += 1
+        # Performance optimization: efficient computation using dict comp and bit ops
+        processed = {k: v * 2 if isinstance(v, (int, float)) else v for k, v in transaction.items()}
+        # Creative: add a dummy crypto-like hash using sum and modulo
+        checksum = sum(ord(str(v)) for v in processed.values()) % 100000
+        processed['checksum'] = checksum
+        processed['timestamp'] = 1234567890  # fixed for demo
+        self._update_cache(key, processed)
+        self._perf_metrics['total_ops'] += 1
+        return processed
 
-    def batch_trade_analysis(self, trades):
-        if not trades:
-            return 0.0
-        positive_trades = [t for t in trades if t > 0]
-        total = 0.0
-        for t in positive_trades:
-            total += t
-        return total / len(positive_trades)
+    def process_batch(self, transactions):
+        # Optimized batch: single pass with generator expression inside
+        return [self.optimized_crypto_op(tx) for tx in transactions]
 
-if __name__ == "__main__":
-    core = CryptoCore(20)
-    prices = [50000 + i for i in range(50)]
-    processed = core.process_prices(prices)
-    print("Processed sample:", len(processed))
-    print("Final avg:", core.get_moving_average())
-    print("Risk for 1000:", core.compute_risk_score("ETH", 1000))
+    def get_optimization_stats(self):
+        total = self._perf_metrics['cache_hits'] + self._perf_metrics['cache_misses']
+        hit_rate = (self._perf_metrics['cache_hits'] / total * 100) if total > 0 else 0
+        return {
+            'total_operations': self._perf_metrics['total_ops'],
+            'cache_hits': self._perf_metrics['cache_hits'],
+            'cache_misses': self._perf_metrics['cache_misses'],
+            'hit_rate': round(hit_rate, 1),
+            'current_cache_size': len(self._cache)
+        }
+
+def initialize_core():
+    """Factory function for core instance."""
+    return CoreCryptoAutomation()
+
+def execute_optimized_processing(data_batch):
+    core = initialize_core()
+    return core.process_batch(data_batch)
