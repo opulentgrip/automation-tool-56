@@ -1,61 +1,55 @@
-import json
-from collections import OrderedDict
+import time
+from decimal import Decimal, InvalidOperation
 
-class CoreCryptoAutomation:
-    """Core module implementing performance optimization for crypto automation."""
+def handle_crypto_edge_cases(data):
+    error_handlers = {
+        'invalid_amount': lambda: Decimal('0'),
+        'zero_price': lambda: Decimal('1'),
+        'network': lambda: None
+    }
+    try:
+        amount = Decimal(str(data.get('amount', '0')))
+        price = Decimal(str(data.get('price', '0')))
+        if amount <= 0:
+            raise ValueError('invalid_amount')
+        if price <= 0:
+            raise ValueError('zero_price')
+        time.sleep(0.01)
+        result = amount * price
+        if result > Decimal('10000000000'):
+            raise OverflowError('result_too_large')
+        return result
+    except InvalidOperation:
+        return error_handlers['invalid_amount']()
+    except ValueError as ve:
+        key = str(ve)
+        handler = error_handlers.get(key, lambda: Decimal('0'))
+        return handler()
+    except OverflowError:
+        return Decimal('0')
+    except Exception:
+        return None
 
-    def __init__(self, cache_limit=50):
-        # Creative unusual approach: manual LRU with OrderedDict for cache
-        self._cache = OrderedDict()
-        self._cache_limit = cache_limit
-        self._perf_metrics = {'cache_hits': 0, 'cache_misses': 0, 'total_ops': 0}
+def run_automation(transactions):
+    results = []
+    for tx in transactions:
+        try:
+            res = handle_crypto_edge_cases(tx)
+            if res is None:
+                time.sleep(1)
+                res = handle_crypto_edge_cases(tx) or Decimal('0')
+            results.append(res)
+        except Exception:
+            results.append(Decimal('0'))
+    return results
 
-    def _make_cache_key(self, data):
-        # Unusual: use sorted json for consistent key without hash collision worry
-        return json.dumps(data, sort_keys=True)
-
-    def _update_cache(self, key, value):
-        if key in self._cache:
-            self._cache.move_to_end(key)
-        self._cache[key] = value
-        while len(self._cache) > self._cache_limit:
-            self._cache.popitem(last=False)
-
-    def optimized_crypto_op(self, transaction):
-        key = self._make_cache_key(transaction)
-        if key in self._cache:
-            self._perf_metrics['cache_hits'] += 1
-            return self._cache[key]
-        self._perf_metrics['cache_misses'] += 1
-        # Performance optimization: efficient computation using dict comp and bit ops
-        processed = {k: v * 2 if isinstance(v, (int, float)) else v for k, v in transaction.items()}
-        # Creative: add a dummy crypto-like hash using sum and modulo
-        checksum = sum(ord(str(v)) for v in processed.values()) % 100000
-        processed['checksum'] = checksum
-        processed['timestamp'] = 1234567890  # fixed for demo
-        self._update_cache(key, processed)
-        self._perf_metrics['total_ops'] += 1
-        return processed
-
-    def process_batch(self, transactions):
-        # Optimized batch: single pass with generator expression inside
-        return [self.optimized_crypto_op(tx) for tx in transactions]
-
-    def get_optimization_stats(self):
-        total = self._perf_metrics['cache_hits'] + self._perf_metrics['cache_misses']
-        hit_rate = (self._perf_metrics['cache_hits'] / total * 100) if total > 0 else 0
-        return {
-            'total_operations': self._perf_metrics['total_ops'],
-            'cache_hits': self._perf_metrics['cache_hits'],
-            'cache_misses': self._perf_metrics['cache_misses'],
-            'hit_rate': round(hit_rate, 1),
-            'current_cache_size': len(self._cache)
-        }
-
-def initialize_core():
-    """Factory function for core instance."""
-    return CoreCryptoAutomation()
-
-def execute_optimized_processing(data_batch):
-    core = initialize_core()
-    return core.process_batch(data_batch)
+if __name__ == "__main__":
+    sample_txs = [
+        {"amount": "10", "price": "100"},
+        {"amount": "0", "price": "100"},
+        {"amount": "abc", "price": "100"},
+        {"amount": "10000000000", "price": "100000"},
+        {"amount": "5", "price": "0.001"}
+    ]
+    processed = run_automation(sample_txs)
+    print(processed)
