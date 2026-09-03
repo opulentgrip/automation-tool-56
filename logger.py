@@ -1,31 +1,37 @@
-import os
 import logging
-from logging.handlers import RotatingFileHandler
+import sys
+from typing import Any, Optional
 
-CRYPTO_LOG_FORMAT = '%(asctime)s | ₿ | %(levelname)s | [%(filename)s:%(lineno)d] - %(message)s'
+class CryptoLogger:
+    """
+    A vibrant logger for the automation-tool-56 environment.
+    Uses standard logging but with a splash of blockchain-themed formatting.
+    """
+    def __init__(self, name: str = "crypto_bot") -> None:
+        self.logger: logging.Logger = logging.getLogger(name)
+        self.logger.setLevel(logging.DEBUG)
+        handler: logging.StreamHandler = logging.StreamHandler(sys.stdout)
+        formatter: logging.Formatter = logging.Formatter(
+            "[%(asctime)s] | %(levelname)s | %(name)s >>> %(message)s"
+        )
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
 
-def setup_crypto_logger(name: str = 'automation_tool_56', log_file: str = 'crypto_ops.log') -> logging.Logger:
-    logger = logging.getLogger(name)
-    if logger.handlers:
-        return logger
-        
-    logger.setLevel(logging.DEBUG)
-    
-    os.makedirs(os.path.dirname(log_file) if os.path.dirname(log_file) else '.', exist_ok=True)
-    
-    file_handler = RotatingFileHandler(log_file, maxBytes=5 * 1024 * 1024, backupCount=3)
-    file_handler.setLevel(logging.INFO)
-    file_formatter = logging.Formatter(CRYPTO_LOG_FORMAT)
-    file_handler.setFormatter(file_formatter)
-    
-    stream_handler = logging.StreamHandler()
-    stream_handler.setLevel(logging.DEBUG)
-    stream_formatter = logging.Formatter(CRYPTO_LOG_FORMAT)
-    stream_handler.setFormatter(stream_formatter)
-    
-    logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)
-    
-    return logger
+    def log_trade(self, pair: str, side: str, price: float, amount: float) -> None:
+        """
+        Logs trade execution events with structured data for audit trails.
+        """
+        msg: str = f"TRADE_EXEC: {side.upper()} {amount} {pair} @ {price}"
+        self.logger.info(msg)
 
-logger = setup_crypto_logger()
+    def warn_risk(self, alert_type: str, details: Optional[Any] = None) -> None:
+        """
+        Emits a warning when risk parameters are breached.
+        """
+        self.logger.warning(f"RISK_ALERT: {alert_type} | Details: {details or 'none'}")
+
+    def fatal_exit(self, error: Exception) -> None:
+        """
+        Critical failure logger for abrupt halt routines.
+        """
+        self.logger.critical(f"SYSTEM_HALT: {type(error).__name__} occurred. Shutdown initiated.")
