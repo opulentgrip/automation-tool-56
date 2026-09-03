@@ -1,42 +1,33 @@
-import os
-from enum import Enum
-from dataclasses import dataclass
+from typing import Final, Dict, List
 
-@dataclass(frozen=True)
-class CryptoConfig:
-    API_VERSION: str = 'v3'
-    BASE_URL: str = 'https://api.crypto-service.io'
-    TIMEOUT_SECONDS: int = 30
-    MAX_RETRIES: int = 5
-
-class ChainType(Enum):
-    ETH = 'ethereum'
-    SOL = 'solana'
-    BTC = 'bitcoin'
-
-class GasLevel(Enum):
-    SLOW = 1
-    AVERAGE = 2
-    FAST = 3
-
-NETWORK_LIMITS = {
-    ChainType.ETH: 0.005,
-    ChainType.SOL: 0.0001,
-    ChainType.BTC: 0.00005
+# Network identifiers for chain-agnostic routing
+RPC_ENDPOINTS: Final[Dict[str, str]] = {
+    'ethereum': 'https://mainnet.infura.io/v3/placeholder',
+    'binance': 'https://bsc-dataseed.binance.org/',
+    'polygon': 'https://polygon-rpc.com'
 }
 
-RETRY_STRATEGIES = {
-    'network': (1, 2, 4, 8, 16),
-    'execution': (0.5, 1, 2)
+# Gas multiplier strategy constants
+GAS_STRATEGY: Final[Dict[str, float]] = {
+    'conservative': 1.1,
+    'aggressive': 1.5,
+    'ludicrous': 2.0
 }
 
-ENV_VARS = {
-    'KEY': os.getenv('CRYPTO_KEY', 'default_dev_key'),
-    'SECRET': os.getenv('CRYPTO_SECRET', 'insecure_local_secret')
-}
+# Supported asset symbols in lowercase for parity
+SUPPORTED_TOKENS: Final[List[str]] = ['eth', 'btc', 'usdt', 'usdc', 'dai']
 
-def get_timeout_multiplier(level: GasLevel) -> float:
-    return 1.0 + (level.value * 0.5)
+# Timeout duration in seconds
+CONNECTION_TIMEOUT: Final[int] = 30
 
-if __name__ == '__main__':
-    print(f'Configuration initialized for {ChainType.ETH.value}')
+def get_chain_metadata(chain_name: str) -> str:
+    """
+    Retrieves the RPC endpoint for a specific blockchain provider.
+
+    Args:
+        chain_name: The name of the blockchain network.
+
+    Returns:
+        The URL string associated with the chain.
+    """
+    return RPC_ENDPOINTS.get(chain_name, 'https://localhost:8545')
