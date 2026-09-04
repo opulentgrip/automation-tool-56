@@ -1,37 +1,28 @@
-import logging
 import sys
-from typing import Any, Optional
+import time
+from datetime import datetime
 
 class CryptoLogger:
-    """
-    A vibrant logger for the automation-tool-56 environment.
-    Uses standard logging but with a splash of blockchain-themed formatting.
-    """
-    def __init__(self, name: str = "crypto_bot") -> None:
-        self.logger: logging.Logger = logging.getLogger(name)
-        self.logger.setLevel(logging.DEBUG)
-        handler: logging.StreamHandler = logging.StreamHandler(sys.stdout)
-        formatter: logging.Formatter = logging.Formatter(
-            "[%(asctime)s] | %(levelname)s | %(name)s >>> %(message)s"
-        )
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+    def __init__(self, prefix: str = 'AUTO56'):
+        self.prefix = prefix
+        self.colors = {'INFO': '\033[94m', 'WARN': '\033[93m', 'ERROR': '\033[91m', 'END': '\033[0m'}
 
-    def log_trade(self, pair: str, side: str, price: float, amount: float) -> None:
-        """
-        Logs trade execution events with structured data for audit trails.
-        """
-        msg: str = f"TRADE_EXEC: {side.upper()} {amount} {pair} @ {price}"
-        self.logger.info(msg)
+    def _format(self, level: str, msg: str) -> str:
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        return f"{self.colors.get(level, '')}[{timestamp}] [{self.prefix}] [{level}] {msg}{self.colors['END']}"
 
-    def warn_risk(self, alert_type: str, details: Optional[Any] = None) -> None:
-        """
-        Emits a warning when risk parameters are breached.
-        """
-        self.logger.warning(f"RISK_ALERT: {alert_type} | Details: {details or 'none'}")
+    def info(self, message: str):
+        sys.stdout.write(self._format('INFO', message) + '\n')
 
-    def fatal_exit(self, error: Exception) -> None:
-        """
-        Critical failure logger for abrupt halt routines.
-        """
-        self.logger.critical(f"SYSTEM_HALT: {type(error).__name__} occurred. Shutdown initiated.")
+    def warn(self, message: str):
+        sys.stdout.write(self._format('WARN', message) + '\n')
+
+    def error(self, message: str):
+        sys.stderr.write(self._format('ERROR', message) + '\n')
+
+    def trace(self, data: dict):
+        for key, val in data.items():
+            self.info(f"  >> {key:<12} : {val}")
+
+def get_logger(name: str = 'automation-tool-56'):
+    return CryptoLogger(name)
