@@ -1,66 +1,46 @@
-import json
 import os
+import json
 from collections import ChainMap
-from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
+DEFAULT_CONFIG = {
+    "CRYPTO_SYMBOL": "BTCUSDT",
+    "TRADE_INTERVAL_SECS": 60,
+    "RISK_FACTOR": 0.02,
+    "ENABLE_SANDBOX": True,
+    "API_KEY": "sandbox_key_default"
+}
 
-class ConfigLoader:
-    """Dynamic hierarchical configuration loader for crypto automation."""
+class DynamicCryptoConfig:
+    def __init__(self, filepath: str = "config.json"):
+        self._filepath = filepath
+        self._file_data = self._load_file()
+        self._map = ChainMap(os.environ, self._file_data, DEFAULT_CONFIG)
 
-    DEFAULT_CONFIG: Dict[str, Any] = {
-        "network": "ethereum_mainnet",
-        "rpc_url": "https://eth.llamarpc.com",
-        "max_gas_gwei": 50.0,
-        "slippage_percent": 0.5,
-        "retry_attempts": 3,
-        "enable_flashbots": False,
-        "monitored_pairs": ["ETH/USDC", "WBTC/ETH"],
-    }
-
-    def __init__(self, filepath: str = "config.json", env_prefix: str = "CRYPTO_"):
-        self._path = Path(filepath)
-        self._prefix = env_prefix
-        self._store = self._build_cascade()
-
-    def _get_env_overrides(self) -> Dict[str, Any]:
-        overrides = {}
-        for key, default_val in self.DEFAULT_CONFIG.items():
-            env_key = f"{self._prefix}{key.upper()}"
-            if env_key in os.environ:
-                raw = os.environ[env_key]
-                target_type = type(default_val)
-                if target_type is bool:
-                    overrides[key] = raw.lower() in ("1", "true", "yes")
-                elif target_type is list:
-                    overrides[key] = [x.strip() for x in raw.split(",") if x.strip()]
-                else:
-                    overrides[key] = target_type(raw)
-        return overrides
-
-    def _load_file(self) -> Dict[str, Any]:
-        if self._path.exists():
+    def _load_file(self) -> dict:
+        if os.path.exists(self._filepath):
             try:
-                with open(self._path, "r", encoding="utf-8") as f:
+                with open(self._filepath, "r") as f:
                     return json.load(f)
-            except (json.JSONDecodeError, OSError):
+            except json.JSONDecodeError:
                 pass
         return {}
 
-    def _build_cascade(self) -> ChainMap:
-        return ChainMap(
-            self._get_env_overrides(),
-            self._load_file(),
-            self.DEFAULT_CONFIG.copy(),
-        )
-
     def __getattr__(self, name: str) -> Any:
-        if name in self._store:
-            return self._store[name]
-        raise AttributeError(f"Configuration key '{name}' not found")
+        if name not in self._map:
+            raise AttributeError(f"Configuration key '{name}' not found.")
+        
+        raw_val = self._map[name]
+        default_val = DEFAULT_CONFIG.get(name)
+        
+        if default_val is not None:
+            target_type = type(default_val)
+            if target_type is bool:
+                return str(raw_val).lower() in ("true", "1", "yes")
+            try:
+                return target_type(raw_val)
+            except (ValueError, TypeError):
+                return default_val
+        return raw_val
 
-    def __getitem__(self, item: str) -> Any:
-        return self._store[item]
-
-    def as_dict(self) -> Dict[str, Any]:
-        return dict(self._store)
+config = DynamicCryptoConfig()
