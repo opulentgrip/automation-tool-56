@@ -1,28 +1,32 @@
-import sys
-import time
-from datetime import datetime
+import logging
+import os
+from logging.handlers import RotatingFileHandler
 
-class CryptoLogger:
-    def __init__(self, prefix: str = 'AUTO56'):
-        self.prefix = prefix
-        self.colors = {'INFO': '\033[94m', 'WARN': '\033[93m', 'ERROR': '\033[91m', 'END': '\033[0m'}
+def get_crypto_logger(name='automation-tool-56', log_file='crypto_engine.log'):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    
+    if not logger.handlers:
+        # Creative formatter for crypto-specific telemetry
+        formatter = logging.Formatter(
+            '%(asctime)s | %(levelname)-8s | [TX-MONITOR] | %(message)s'
+        )
+        
+        # Rolling log files capped at 5MB, keep 3 historical versions
+        handler = RotatingFileHandler(
+            log_file, 
+            maxBytes=5 * 1024 * 1024, 
+            backupCount=3
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        
+        # Stream logs to stdout for real-time visibility
+        console = logging.StreamHandler()
+        console.setFormatter(formatter)
+        logger.addHandler(console)
+    
+    return logger
 
-    def _format(self, level: str, msg: str) -> str:
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        return f"{self.colors.get(level, '')}[{timestamp}] [{self.prefix}] [{level}] {msg}{self.colors['END']}"
-
-    def info(self, message: str):
-        sys.stdout.write(self._format('INFO', message) + '\n')
-
-    def warn(self, message: str):
-        sys.stdout.write(self._format('WARN', message) + '\n')
-
-    def error(self, message: str):
-        sys.stderr.write(self._format('ERROR', message) + '\n')
-
-    def trace(self, data: dict):
-        for key, val in data.items():
-            self.info(f"  >> {key:<12} : {val}")
-
-def get_logger(name: str = 'automation-tool-56'):
-    return CryptoLogger(name)
+# Instantiate the logger as a module singleton for easy access
+crypto_logger = get_crypto_logger()
