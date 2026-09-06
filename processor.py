@@ -1,31 +1,38 @@
-import json
-import requests
-from concurrent.futures import ThreadPoolExecutor
+import struct
+from typing import Dict, List, Tuple
 
-class CryptoProcessor:
-    def __init__(self, api_url):
-        self.api_url = api_url
+class PacketProcessor:
+    """High-throughput binary protocol parser for exchange websocket feeds."""
 
-    def fetch_data(self, coin):
-        response = requests.get(f'{self.api_url}/{coin}')
-        return response.json() if response.status_code == 200 else None
+    def __init__(self, header_format: str = ">IHH"):
+        self._header_struct = struct.Struct(header_format)
+        self._header_size = self._header_struct.size
+        self._payload_struct = struct.Struct(">dd")
 
-    def process_coins(self, coins):
-        results = []
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            future_to_coin = {executor.submit(self.fetch_data, coin): coin for coin in coins}
-            for future in future_to_coin:
-                coin = future_to_coin[future]
-                try:
-                    result = future.result()
-                    if result:
-                        results.append({coin: result})
-                except Exception as e:
-                    print(f'Error fetching {coin}: {e}')  
-        return results
+    def batch_process_ticks(self, raw_buffer: bytearray) -> List[Tuple[int, float, float]]:
+        """Zero-copy extraction of binary market tick streams using memoryview."""
+        view = memoryview(raw_buffer)
+        offset = 0
+        total_len = len(raw_buffer)
+        ticks = []
 
-if __name__ == '__main__':
-    processor = CryptoProcessor('https://api.coingecko.com/api/v3/simple/price')
-    coins = ['bitcoin', 'ethereum', 'dogecoin']
-    data = processor.process_coins(coins)
-    print(json.dumps(data, indent=2))
+        while offset + self._header_size + 16 <= total_len:
+            seq, pair_id, payload_len = self._header_struct.unpack_from(view, offset)
+            offset += self._header_size
+
+            if offset + payload_len > total_len:
+                break
+
+            price, volume = self._payload_struct.unpack_from(view, offset)
+            ticks.append((pair_id, price, volume))
+            offset += payload_len
+
+        return ticks
+
+    def optimize_depth_aggregation(self, bids: List[Tuple[float, float]]) -> Dict[float, float]:
+        """Fast order book depth bucket aggregation."""
+        aggregated: Dict[float, float] = {}
+        for price, qty in bids:
+            bucket = round(price, 2)
+            aggregated[bucket] = aggregated.get(bucket, 0.0) + qty
+        return aggregated
