@@ -1,46 +1,27 @@
 import os
 import json
-from collections import ChainMap
-from typing import Any
+from typing import Any, Dict
 
-DEFAULT_CONFIG = {
-    "CRYPTO_SYMBOL": "BTCUSDT",
-    "TRADE_INTERVAL_SECS": 60,
-    "RISK_FACTOR": 0.02,
-    "ENABLE_SANDBOX": True,
-    "API_KEY": "sandbox_key_default"
-}
+class ConfigMeta(type):
+    def __new__(mcs, name, bases, attrs):
+        defaults = {}
+        cleaned_attrs = {}
+        for k, v in attrs.items():
+            if not k.startswith('_') and not callable(v):
+                defaults[k] = v
+            else:
+                cleaned_attrs[k] = v
+        cls = super().__new__(mcs, name, bases, cleaned_attrs)
+        cls._defaults = defaults
+        return cls
 
-class DynamicCryptoConfig:
+class CryptoConfig(metaclass=ConfigMeta):
+    RPC_URL: str = "https://eth.llamarpc.com"
+    GAS_MULTIPLIER: float = 1.15
+    RETRY_COUNT: int = 3
+    ENABLE_MEV_PROTECTION: bool = True
+    TARGET_TOKENS: list = ["WETH", "USDC", "USDT"]
+
     def __init__(self, filepath: str = "config.json"):
         self._filepath = filepath
-        self._file_data = self._load_file()
-        self._map = ChainMap(os.environ, self._file_data, DEFAULT_CONFIG)
-
-    def _load_file(self) -> dict:
-        if os.path.exists(self._filepath):
-            try:
-                with open(self._filepath, "r") as f:
-                    return json.load(f)
-            except json.JSONDecodeError:
-                pass
-        return {}
-
-    def __getattr__(self, name: str) -> Any:
-        if name not in self._map:
-            raise AttributeError(f"Configuration key '{name}' not found.")
-        
-        raw_val = self._map[name]
-        default_val = DEFAULT_CONFIG.get(name)
-        
-        if default_val is not None:
-            target_type = type(default_val)
-            if target_type is bool:
-                return str(raw_val).lower() in ("true", "1", "yes")
-            try:
-                return target_type(raw_val)
-            except (ValueError, TypeError):
-                return default_val
-        return raw_val
-
-config = DynamicCryptoConfig()
+        self
