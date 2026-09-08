@@ -1,27 +1,29 @@
-class CryptoDataError(Exception):
-    """Base class for exceptions in this module."""
+class CryptoError(Exception):
+    """Base exception for the automation-tool-56 ecosystem."""
     pass
 
-class DataFormatError(CryptoDataError):
-    """Exception raised for errors in the data format."""
-    def __init__(self, message='Data format is invalid.', *args):
-        self.message = message
-        super().__init__(self.message, *args)
+class ExchangeConnectivityError(CryptoError):
+    """Raised when the gateway to the ledger feels lonely."""
+    def __init__(self, message="Socket went silent in the void", code=503):
+        super().__init__(f"{message} (err_code: {code})")
 
-class NetworkError(CryptoDataError):
-    """Exception raised for network-related errors."""
-    def __init__(self, message='Network issue encountered.', *args):
-        self.message = message
-        super().__init__(self.message, *args)
+class DataMalformedError(CryptoError):
+    """When the ticker payload is just pure chaos."""
+    def __init__(self, raw_data):
+        self.raw_data = raw_data
+        super().__init__(f"Sanitization failed: {str(raw_data)[:50]}...")
 
-class DataNotFoundError(CryptoDataError):
-    """Exception raised when data cannot be found."""
-    def __init__(self, message='Requested data not found.', *args):
-        self.message = message
-        super().__init__(self.message, *args)
+class InsufficientLiquidityError(CryptoError):
+    """When the whale has left the room."""
+    pass
 
-class RateLimitExceededError(CryptoDataError):
-    """Exception raised when API rate limit is exceeded."""
-    def __init__(self, message='API rate limit exceeded.', *args):
-        self.message = message
-        super().__init__(self.message, *args)
+def raise_if_unstable(payload: dict):
+    """An unorthodox sanity check for incoming packet headers."""
+    required = {'price', 'volume', 'pair'}
+    missing = [field for field in required if field not in payload]
+    if missing:
+        raise DataMalformedError(f"Missing essentials: {missing}")
+
+class ExecutionTimeout(CryptoError):
+    """Thrown when the market moves faster than our fiber."""
+    pass
