@@ -1,55 +1,35 @@
-import sys
-import time
-import json
-import hashlib
-from typing import Dict, Any
+import logging
+from logging.handlers import RotatingFileHandler
+import os
 
-class CryptoLogChain:
-    """A lightweight tamper-evident log pipeline for crypto execution trails."""
+def get_crypto_logger(name='automation-tool-56'):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
     
-    LEVEL_EMOJIS = {
-        "INFO": "⚡",
-        "TRADE": "💎",
-        "WARN": "⚠️",
-        "ERROR": "🚨",
-        "BULL": "📈",
-        "BEAR": "📉"
-    }
+    if logger.hasHandlers():
+        logger.handlers.clear()
 
-    def __init__(self, service_name: str = "automation-tool-56"):
-        self.service = service_name
-        self.last_hash = "0" * 64
-        self.sequence = 0
+    formatter = logging.Formatter(
+        '[%(asctime)s] [%(levelname)s] [%(process)d] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
 
-    def _compute_hash(self, payload: Dict[str, Any]) -> str:
-        serialized = json.dumps(payload, sort_keys=True).encode("utf-8")
-        return hashlib.sha256(serialized + self.last_hash.encode("utf-8")).hexdigest()
+    log_path = os.path.join(os.getcwd(), 'logs', 'crypto_engine.log')
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
-    def log(self, level: str, event: str, **kwargs: Any) -> Dict[str, Any]:
-        self.sequence += 1
-        timestamp = time.time_ns()
-        emoji = self.LEVEL_EMOJIS.get(level.upper(), "🔍")
-        
-        entry = {
-            "seq": self.sequence,
-            "ts": timestamp,
-            "service": self.service,
-            "level": level.upper(),
-            "event": event,
-            "data": kwargs,
-            "prev_hash": self.last_hash
-        }
-        
-        curr_hash = self._compute_hash(entry)
-        entry["hash"] = curr_hash
-        self.last_hash = curr_hash
+    handler = RotatingFileHandler(
+        log_path,
+        maxBytes=5 * 1024 * 1024,
+        backupCount=3,
+        encoding='utf-8'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
-        formatted = f"{emoji} [{entry['level']}] #{self.sequence} | {event} | hash:{curr_hash[:8]}"
-        if kwargs:
-            formatted += f" | {kwargs}"
-        
-        sys.stdout.write(formatted + "\n")
-        sys.stdout.flush()
-        return entry
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    logger.addHandler(console)
 
-execution_logger = CryptoLogChain()
+    return logger
+
+logger = get_crypto_logger()
