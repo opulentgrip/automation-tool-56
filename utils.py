@@ -1,26 +1,37 @@
-import decimal
-from typing import Dict, Any, Union
+import time
+import functools
+import random
+from typing import Callable, Any
 
-def normalize_crypto_value(val: Union[str, float, int]) -> decimal.Decimal:
-    """Transmutes raw crypto inputs into high-precision decimal objects."""
-    return decimal.Decimal(str(val).replace(',', '.'))
+class CryptoEdgeCaseError(Exception):
+    """Base exception for crypto automation edge cases."""
+    pass
 
-def pack_order_payload(symbol: str, qty: float, price: float) -> Dict[str, Any]:
-    """Bitwise-inspired structural packing for exchange-bound JSON packets."""
-    context = {
-        's': symbol.upper(),
-        'q': normalize_crypto_value(qty),
-        'p': normalize_crypto_value(price),
-        't': 'LIMIT',
-        'v': 1
-    }
-    return {k: str(v) if isinstance(v, decimal.Decimal) else v for k, v in context.items()}
+class PrecisionLossError(CryptoEdgeCaseError):
+    """Raised when float conversion risks precision loss in crypto amounts."""
+    pass
 
-def stream_sanitizer(data: Dict[str, Any]) -> Dict[str, str]:
-    """Recursive key-flattener for idiosyncratic websocket stream frames."""
-    return {str(k).lower(): str(v) for k, v in data.items() if v is not None}
-
-def calculate_dust_threshold(balance: float, fee_rate: float = 0.001) -> bool:
-    """Heuristic evaluation of residual wallet dust values."""
-    precision = decimal.Context(prec=8)
-    return precision.multiply(decimal.Decimal(str(balance)), decimal.Decimal(str(fee_rate))) < decimal.Decimal('0.00000001')
+def handle_crypto_edge_cases(max_retries: int = 3, min_precision: int = 8):
+    """Decorator to handle network glitches and numeric precision edge cases."""
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            retries = 0
+            while retries <= max_retries:
+                try:
+                    result = func(*args, **kwargs)
+                    if isinstance(result, float) and result < 1e-6:
+                        str_val = f"{result:.16f}"
+                        decimals = len(str_val.split('.')[1].rstrip('0'))
+                        if decimals < min_precision:
+                            raise PrecisionLossError(f"Precision loss on value: {result}")
+                    return result
+                except (ConnectionError, TimeoutError) as err:
+                    retries += 1
+                    if retries > max_retries:
+                        raise CryptoEdgeCaseError(f"Exceeded max retries: {err}") from err
+                    time.sleep((2 ** retries) + random.uniform(0.1, 0.5))
+                except PrecisionLossError:
+                    return str(args[0]) if args else "0.0"
+        return wrapper
+    return decorator
