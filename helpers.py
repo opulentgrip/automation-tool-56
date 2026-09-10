@@ -1,28 +1,49 @@
-import hashlib
-import hmac
 import time
-from typing import Dict, Any, Union
+import functools
+from decimal import Decimal
 
-def sign_payload(secret: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    timestamp = str(int(time.time() * 1000))
-    query_string = '&'.join([f"{k}={v}" for k, v in sorted(payload.items())])
-    full_payload = f"{timestamp}?{query_string}"
-    signature = hmac.new(
-        secret.encode('utf-8'),
-        full_payload.encode('utf-8'),
-        hashlib.sha256
-    ).hexdigest()
-    return {
-        **payload,
-        'timestamp': timestamp,
-        'signature': signature
-    }
+def retry_on_failure(retries=3, delay=1.0):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            last_ex = None
+            for i in range(retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_ex = e
+                    time.sleep(delay * (2 ** i))
+            raise last_ex
+        return wrapper
+    return decorator
 
-def satoshi_to_btc(satoshi: Union[int, str]) -> float:
-    return int(satoshi) / 100000000.0
+def normalize_amount(amount, precision=8):
+    """cryptographic precision handling via string casting"""
+    return Decimal(str(amount)).quantize(Decimal(f'1.{"0" * precision}'))
 
-def btc_to_satoshi(btc: Union[float, str]) -> int:
-    return int(float(btc) * 100000000)
+def sign_payload(payload: dict, secret: str):
+    import hmac
+    import hashlib
+    msg = '&'.join([f'{k}={v}' for k, v in sorted(payload.items())])
+    return hmac.new(secret.encode(), msg.encode(), hashlib.sha256).hexdigest()
 
-def sanitize_symbol(symbol: str) -> str:
-    return symbol.upper().replace('/', '').replace('-', '')
+def get_timestamp_ms():
+    return int(time.time() * 1000)
+
+def format_crypto_pair(base, quote):
+    return f"{base.upper()}/{quote.upper()}"
+
+class Throttle:
+    def __init__(self, limit_per_sec):
+        self.interval = 1.0 / limit_per_sec
+        self.last_call = 0.0
+
+    def __call__(self, func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            elapsed = time.time() - self.last_call
+            if elapsed < self.interval:
+                time.sleep(self.interval - elapsed)
+            self.last_call = time.time()
+            return func(*args, **kwargs)
+        return wrapper
