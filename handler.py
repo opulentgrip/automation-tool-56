@@ -1,27 +1,27 @@
-import json
-import requests
-from datetime import datetime
+import logging
 
-class CryptoDataHandler:
-    BASE_URL = 'https://api.coingecko.com/api/v3/'
+def validate_payload(data):
+    required_fields = {'asset_pair', 'side', 'amount'}
+    if not all(k in data for k in required_fields):
+        raise ValueError(f'missing keys: {required_fields - data.keys()}')
+    if not isinstance(data.get('amount'), (int, float)) or data['amount'] <= 0:
+        raise ValueError('invalid amount quantity')
+    return True
 
-    @staticmethod
-    def fetch_market_data(currency: str) -> dict:
-        response = requests.get(f'{CryptoDataHandler.BASE_URL}simple/price?ids=bitcoin&vs_currencies={currency}')
-        response.raise_for_status()
-        return response.json()
+def run_processing_loop(event_stream):
+    logger = logging.getLogger('automation-tool-56')
+    for packet in event_stream:
+        try:
+            if validate_payload(packet):
+                process_order(packet)
+        except Exception as e:
+            logger.error(f'input validation failure: {e}')
+            continue
 
-    @staticmethod
-    def format_data(data: dict, currency: str) -> str:
-        price = data.get('bitcoin', {}).get(currency, 'N/A')
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        return json.dumps({'currency': currency, 'price': price, 'timestamp': timestamp}, indent=4)
+def process_order(data):
+    # Core business logic for crypto execution
+    pass
 
-    @staticmethod
-    def get_price(currency: str) -> str:
-        market_data = CryptoDataHandler.fetch_market_data(currency)
-        return CryptoDataHandler.format_data(market_data, currency)
-
-# Example usage:
-# handler = CryptoDataHandler()
-# print(handler.get_price('usd'))
+if __name__ == '__main__':
+    mock_stream = [{'asset_pair': 'BTC-USDT', 'side': 'buy', 'amount': 0.5}, {'amount': -1}]
+    run_processing_loop(mock_stream)
