@@ -2,7 +2,7 @@ import time
 import functools
 from decimal import Decimal
 
-def retry_on_failure(retries=3, delay=1.0):
+def retry_on_failure(retries=3, delay=1.5):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -17,33 +17,25 @@ def retry_on_failure(retries=3, delay=1.0):
         return wrapper
     return decorator
 
-def normalize_amount(amount, precision=8):
-    """cryptographic precision handling via string casting"""
-    return Decimal(str(amount)).quantize(Decimal(f'1.{"0" * precision}'))
+def format_crypto(amount, precision=8):
+    return f"{Decimal(str(amount)):.{precision}f}"
 
-def sign_payload(payload: dict, secret: str):
+def sign_payload(data, secret):
     import hmac
     import hashlib
-    msg = '&'.join([f'{k}={v}' for k, v in sorted(payload.items())])
+    msg = "&".join([f"{k}={v}" for k, v in sorted(data.items())])
     return hmac.new(secret.encode(), msg.encode(), hashlib.sha256).hexdigest()
 
-def get_timestamp_ms():
-    return int(time.time() * 1000)
+class CryptoBuffer:
+    def __init__(self, size=100):
+        self._data = []
+        self.size = size
 
-def format_crypto_pair(base, quote):
-    return f"{base.upper()}/{quote.upper()}"
+    def push(self, item):
+        self._data.append(item)
+        if len(self._data) > self.size:
+            self._data.pop(0)
 
-class Throttle:
-    def __init__(self, limit_per_sec):
-        self.interval = 1.0 / limit_per_sec
-        self.last_call = 0.0
-
-    def __call__(self, func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            elapsed = time.time() - self.last_call
-            if elapsed < self.interval:
-                time.sleep(self.interval - elapsed)
-            self.last_call = time.time()
-            return func(*args, **kwargs)
-        return wrapper
+    def get_avg(self):
+        if not self._data: return 0
+        return sum(self._data) / len(self._data)
