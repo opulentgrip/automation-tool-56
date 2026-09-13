@@ -1,60 +1,56 @@
-import hashlib
-import os
 import logging
+import os
 from logging.handlers import RotatingFileHandler
 
-class CryptoChainRotatingHandler(RotatingFileHandler):
-    """
-    Rotating file handler that seals rotated log segments with a SHA-256 hash
-    to verify chain-of-custody integrity.
-    """
-    def __init__(self, filename, maxBytes=1024*1024, backupCount=5, encoding=None, delay=False):
-        super().__init__(filename, maxBytes=maxBytes, backupCount=backupCount, encoding=encoding, delay=delay)
-        self.last_hash = "0" * 64
 
-    def doRollover(self):
-        super().doRollover()
-        rotated_file = f"{self.baseFilename}.1"
-        if os.path.exists(rotated_file):
-            sha256 = hashlib.sha256()
-            with open(rotated_file, "rb") as f:
-                while chunk := f.read(8192):
-                    sha256.update(chunk)
-            self.last_hash = sha256.hexdigest()
-            if self.stream:
-                self.stream.write(f"\n[SYSTEM-CHAIN] BLOCK ROTATED | SEAL HASH: {self.last_hash}\n\n")
-                self.flush()
+class CryptoColorFormatter(logging.Formatter):
+    COLORS = {
+        "INFO": "\033[94m",
+        "WARNING": "\033[93m",
+        "ERROR": "\033[91m",
+        "CRITICAL": "\033[95m",
+    }
+    RESET = "\033[0m"
 
-def setup_crypto_logger(name: str = "crypto_automation", log_file: str = "app.log") -> logging.Logger:
+    def format(self, record):
+        color = self.COLORS.get(record.levelname, self.RESET)
+        record.levelname = f"{color}[{record.levelname}]{self.RESET}"
+        return super().format(record)
+
+
+def setup_logger(
+    name: str = "crypto_bot",
+    log_file: str = "logs/automation.log",
+    max_bytes: int = 2 * 1024 * 1024,
+    backup_count: int = 5,
+) -> logging.Logger:
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
+
     if logger.handlers:
         return logger
 
-    file_handler = CryptoChainRotatingHandler(log_file, maxBytes=50000, backupCount=3, encoding="utf-8")
-    
-    class CryptoFormatter(logging.Formatter):
-        EMOJIS = {
-            logging.DEBUG: "🔍",
-            logging.INFO: "⚡",
-            logging.WARNING: "⚠️",
-            logging.ERROR: "🚨",
-            logging.CRITICAL: "💥"
-        }
-        def format(self, record):
-            emoji = self.EMOJIS.get(record.levelno, "📝")
-            original_msg = record.msg
-            record.msg = f"{emoji} {original_msg}"
-            result = super().format(record)
-            record.msg = original_msg
-            return result
+    fmt = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    date_fmt = "%Y-%m-%d %H:%M:%S"
 
-    formatter = CryptoFormatter("[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-    file_handler.setFormatter(formatter)
-    
+    file_handler = RotatingFileHandler(
+        log_file, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
+    )
+    file_handler.setFormatter(logging.Formatter(fmt, datefmt=date_fmt))
+    file_handler.setLevel(logging.DEBUG)
+
     console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    
+    console_handler.setFormatter(CryptoColorFormatter(fmt, datefmt=date_fmt))
+    console_handler.setLevel(logging.INFO)
+
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
+
     return logger
+
+
+if __name__ == "__main__":
+    log = setup_logger()
+    log.info("initialized crypto automation logger")
+    log.warning("high gas price detected on ethereum mainnet")
