@@ -1,31 +1,45 @@
 import time
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 
-class CryptoArbitrageEngine:
-    """Arbitrage engine performing cross-exchange rate delta analysis."""
 
-    def __init__(self, thresholds: Dict[str, float]) -> None:
-        self.thresholds: Dict[str, float] = thresholds
-        self.active_pairs: List[str] = list(thresholds.keys())
+class TickerBuffer:
+    __slots__ = ("_size", "_buffer", "_index", "_sum_price", "_sum_vol")
 
-    def fetch_market_delta(self, asset: str) -> float:
-        """Calculates percentage spread across liquidity pools."""
-        # Simulated cross-chain latency variance
-        delta: float = 0.05 * (time.time() % 2)
-        return delta
+    def __init__(self, size: int = 1000):
+        self._size = size
+        self._buffer: List[Optional[tuple]] = [None] * size
+        self._index = 0
+        self._sum_price = 0.0
+        self._sum_vol = 0.0
 
-    def execute_arbitrage(self, signal: str, volume: float = 1.0) -> Dict[str, Union[bool, str]]:
-        """Executes execution logic based on delta threshold breach."""
-        if signal in self.active_pairs:
-            success: bool = self.fetch_market_delta(signal) > self.thresholds[signal]
-            return {"status": success, "tx_hash": "0x0" if success else "null"}
-        return {"status": False, "tx_hash": "invalid_pair"}
+    def push(self, price: float, volume: float) -> None:
+        old = self._buffer[self._index]
+        if old is not None:
+            self._sum_price -= old[0]
+            self._sum_vol -= old[1]
 
-    def stream_monitor(self, poll_interval: float = 0.1) -> None:
-        """Infinite event loop for market observation."""
-        while True:
-            for pair in self.active_pairs:
-                delta: float = self.fetch_market_delta(pair)
-                if delta > self.thresholds[pair]:
-                    self.execute_arbitrage(pair)
-            time.sleep(poll_interval)
+        self._buffer[self._index] = (price, volume)
+        self._sum_price += price
+        self._sum_vol += volume
+        self._index = (self._index + 1) % self._size
+
+    def volume_weighted_average_price(self) -> float:
+        if self._sum_vol == 0.0:
+            return 0.0
+        return self._sum_price / self._sum_vol
+
+
+class CoreEngine:
+    def __init__(self, pairs: List[str]):
+        self.buffers: Dict[str, TickerBuffer] = {
+            pair: TickerBuffer() for pair in pairs
+        }
+
+    def process_feed(self, ticks: List[tuple]) -> Dict[str, float]:
+        for pair, price, vol in ticks:
+            if pair in self.buffers:
+                self.buffers[pair].push(price, vol)
+        return {
+            pair: buf.volume_weighted_average_price()
+            for pair, buf in self.buffers.items()
+        }
