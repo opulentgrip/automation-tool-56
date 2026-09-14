@@ -1,55 +1,41 @@
-import math
-from collections import deque
-from typing import Dict, Generator, List, Tuple
+import time
+import functools
+from decimal import Decimal
 
+def retry_with_backoff(retries=3, delay=1):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            last_ex = None
+            for i in range(retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_ex = e
+                    time.sleep(delay * (2 ** i))
+            raise last_ex
+        return wrapper
+    return decorator
 
-class DynamicVWAPAggregator:
-    """Sliding-window VWAP calculator using custom decay weighting."""
+def normalize_amount(amount):
+    try:
+        return Decimal(str(amount)).quantize(Decimal('1.00000000'))
+    except Exception:
+        return Decimal('0.00000000')
 
-    def __init__(self, window_size: int = 50, decay: float = 0.99):
-        self.window_size = window_size
-        self.decay = decay
-        self._buffers: Dict[str, deque] = {}
+class ChainTicker:
+    def __init__(self, mapping):
+        self._map = mapping
 
-    def process_stream(
-        self, ticks: List[Tuple[str, float, float, float]]
-    ) -> Generator[Dict[str, float], None, None]:
-        for sym, price, vol, ts in ticks:
-            if sym not in self._buffers:
-                self._buffers[sym] = deque(maxlen=self.window_size)
+    def __getitem__(self, key):
+        return self._map.get(key.upper(), 'UNKNOWN')
 
-            self._buffers[sym].append((price, vol, ts))
+    def items(self):
+        return self._map.items()
 
-            weighted_vol_sum = 0.0
-            weighted_pv_sum = 0.0
-            buf = self._buffers[sym]
+def safe_env_load(env_dict, key, default):
+    raw = env_dict.get(key, default)
+    return raw if raw is not None else default
 
-            for idx, (p, v, _) in enumerate(reversed(buf)):
-                weight = math.pow(self.decay, idx)
-                weighted_vol_sum += v * weight
-                weighted_pv_sum += p * v * weight
-
-            vwap = (
-                weighted_pv_sum / weighted_vol_sum
-                if weighted_vol_sum > 0
-                else price
-            )
-            yield {
-                "symbol": sym,
-                "vwap": round(vwap, 8),
-                "depth": len(buf),
-                "latest_price": price,
-            }
-
-
-def parse_crypto_ticks(raw_data: List[Dict]) -> List[Tuple[str, float, float, float]]:
-    """Parses heterogeneous websocket payloads into standardized tuples."""
-    ticks = []
-    for item in raw_data:
-        sym = str(item.get("s") or item.get("symbol") or "BTCUSDT").upper()
-        price = float(item.get("p") or item.get("price") or 0.0)
-        vol = float(item.get("q") or item.get("v") or item.get("volume") or 0.0)
-        ts = float(item.get("T") or item.get("t") or item.get("timestamp") or 0.0)
-        if price > 0 and vol > 0:
-            ticks.append((sym, price, vol, ts))
-    return ticks
+def generate_nonce():
+    return int(time.time() * 1000)
