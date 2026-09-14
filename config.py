@@ -1,27 +1,36 @@
-import os
 import json
+import os
 from typing import Any, Dict
 
-class ConfigMeta(type):
-    def __new__(mcs, name, bases, attrs):
-        defaults = {}
-        cleaned_attrs = {}
-        for k, v in attrs.items():
-            if not k.startswith('_') and not callable(v):
-                defaults[k] = v
-            else:
-                cleaned_attrs[k] = v
-        cls = super().__new__(mcs, name, bases, cleaned_attrs)
-        cls._defaults = defaults
-        return cls
+class ConfigLoader:
+    _defaults = {
+        'rpc_url': 'https://mainnet.infura.io/v3/default',
+        'gas_limit': 21000,
+        'retry_count': 3,
+        'debug': False
+    }
 
-class CryptoConfig(metaclass=ConfigMeta):
-    RPC_URL: str = "https://eth.llamarpc.com"
-    GAS_MULTIPLIER: float = 1.15
-    RETRY_COUNT: int = 3
-    ENABLE_MEV_PROTECTION: bool = True
-    TARGET_TOKENS: list = ["WETH", "USDC", "USDT"]
+    def __init__(self, config_path: str = 'config.json'):
+        self.path = config_path
+        self.data = self._load()
 
-    def __init__(self, filepath: str = "config.json"):
-        self._filepath = filepath
-        self
+    def _load(self) -> Dict[str, Any]:
+        if not os.path.exists(self.path):
+            return self._defaults
+        try:
+            with open(self.path, 'r') as f:
+                user_config = json.load(f)
+            return {**self._defaults, **user_config}
+        except (json.JSONDecodeError, IOError):
+            return self._defaults
+
+    def __getattr__(self, name: str) -> Any:
+        if name in self.data:
+            return self.data[name]
+        raise AttributeError(f'Config key {name} not found')
+
+    def reload(self):
+        self.data = self._load()
+
+# Singleton pattern for global access
+config = ConfigLoader()
