@@ -1,34 +1,41 @@
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+from pathlib import Path
 
-def setup_crypto_logger(name: str = 'automation-tool-56') -> logging.Logger:
-    log_path = os.path.join(os.getcwd(), 'logs', 'crypto_engine.log')
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+LOG_DIR = Path("logs")
+LOG_FILE = LOG_DIR / "crypto_automation.log"
 
+class CryptoFormatter(logging.Formatter):
+    def format(self, record):
+        record.msg = f"[CRYPTO-TX] {record.msg}"
+        return super().format(record)
+
+def setup_logger(name: str = "automation-tool-56"):
+    LOG_DIR.mkdir(exist_ok=True)
+    
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
-
-    formatter = logging.Formatter(
-        '[%(asctime)s] | %(levelname)s | %(name)s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
-    rotator = RotatingFileHandler(
-        log_path, 
+    
+    handler = RotatingFileHandler(
+        LOG_FILE, 
         maxBytes=5 * 1024 * 1024, 
         backupCount=3
     )
-    rotator.setFormatter(formatter)
-
-    console = logging.StreamHandler()
-    console.setFormatter(formatter)
-
-    if not logger.handlers:
-        logger.addHandler(rotator)
-        logger.addHandler(console)
-
+    
+    console_handler = logging.StreamHandler()
+    
+    formatter = CryptoFormatter(
+        fmt="%(asctime)s | %(levelname)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    
+    handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    logger.addHandler(handler)
+    logger.addHandler(console_handler)
+    
     return logger
 
-# Instantiate core log hook for automation-tool-56
-engine_logger = setup_crypto_logger('crypto_bot')
+logger = setup_logger()
