@@ -1,42 +1,48 @@
 # automation-tool-56
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-`automation-tool-56` is a high-frequency cryptocurrency trading and liquidity monitoring engine built in Python. It automates arbitrage detection across decentralized exchanges and dispatches low-latency execution payloads directly to smart contracts.
+A high-performance Python-based automation engine designed for decentralized exchange interaction and portfolio rebalancing. This tool enables systematic liquidity management and trade execution across multiple EVM-compatible networks with minimal latency.
 
 ## Features
 
-* **Real-time Mempool Monitoring:** Tracks pending transactions on Ethereum and Binance Smart Chain using Web3.py to identify potential front-run and sandwich opportunities.
-* **Multi-DEX Price Routing:** Scans liquidity pools across Uniswap V3, SushiSwap, and PancakeSwap to calculate optimal swap paths and detect price discrepancies.
-* **Asynchronous Execution:** Built on Python's `asyncio` to maintain concurrent WebSocket connections to multiple RPC nodes for sub-millisecond block updates.
-* **Automated Gas Optimization:** Dynamically adjusts EIP-1559 priority fees based on network congestion to guarantee swift transaction settlement.
+*   **Multi-Chain Execution:** Native support for Ethereum, Arbitrum, and BSC using asynchronous RPC calls for parallel transaction processing.
+*   **Intelligent Rebalancing:** Automated portfolio drift detection with configurable slippage thresholds and gas fee optimization.
+*   **Flash Loan Readiness:** Integrated helper modules for interacting with Aave and Uniswap V3 liquidity pools.
+*   **Security-First Design:** Encrypted local keystore management and automatic circuit breakers to halt operations during abnormal market volatility.
 
 ## Installation
 
-Ensure you have Python 3.10 or higher installed.
+Ensure you have Python 3.10+ installed.
 
 ```bash
-git clone https://github.com/developer/automation-tool-56.git
+# Clone the repository
+git clone https://github.com/Developer/automation-tool-56.git
 cd automation-tool-56
-pip install web3 eth-account python-dotenv websockets
+
+# Create virtual environment and install dependencies
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Configure your environment variables by creating a `.env` file in the root directory:
+## Basic Usage
 
-```env
-RPC_WSS_URL=wss://eth-mainnet.g.alchemy.com/v2/demo-key
-PRIVATE_KEY=0x4c085142a275dded6188e7343e86da915854b7911976077759d57b447477161b
-```
-
-## Quick Start
-
-Execute the following script to initialize the engine and start monitoring target pools for arbitrage opportunities:
+Configure your environment variables in `.env` with your private keys and RPC endpoints, then initiate the automation runner:
 
 ```python
-import asyncio
-from engine import ArbitrageEngine
+from automation import Runner
 
-async def main():
-    # Initialize engine targeting USDC/WETH pools
-    engine = ArbitrageEngine(
-        target_token="0
+# Initialize the engine
+engine = Runner(network='arbitrum', strategy='market_maker')
+
+# Start the monitoring loop
+engine.start(interval=60)
+```
+
+## Safety Warning
+Always test your configurations on a testnet (e.g., Sepolia or Arbitrum Goerli) before deploying with production capital. The author is not responsible for any financial losses resulting from misconfigured parameters.
+
+## License
+
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+
+Distributed under the MIT License. See `LICENSE` for more information.
