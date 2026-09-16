@@ -1,37 +1,45 @@
+import os
+import hashlib
 import logging
 from logging.handlers import RotatingFileHandler
-import os
-from pathlib import Path
 
-class CryptoLogger:
-    def __init__(self, name='crypto_node', log_dir='logs', max_bytes=5*1024*1024, backup_count=3):
-        self.log_path = Path(log_dir)
-        self.log_path.mkdir(exist_ok=True)
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.DEBUG)
+class LedgerFormatter(logging.Formatter):
+    def __init__(self, fmt=None, datefmt=None):
+        super().__init__(fmt, datefmt)
+        self.prev_hash = "0" * 64
+
+    def format(self, record):
+        original_msg = record.getMessage()
+        data_to_hash = f"{self.prev_hash}|{record.created}|{original_msg}"
+        current_hash = hashlib.sha256(data_to_hash.encode('utf-8')).hexdigest()
         
-        # using a custom formatter with hex-like aesthetics for blockchain tracking
-        formatter = logging.Formatter(
-            '[%(asctime)s] 0x%(levelname)s - %(name)s::%(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
+        record.prev_hash = self.prev_hash[:8]
+        record.curr_hash = current_hash[:8]
+        self.prev_hash = current_hash
+        
+        return super().format(record)
 
-        # rotating handler for high frequency crypto-log volume
-        handler = RotatingFileHandler(
-            self.log_path / f'{name}.log',
-            maxBytes=max_bytes,
-            backupCount=backup_count
-        )
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+def setup_logger(log_file="ledger.log", max_bytes=5 * 1024 * 1024, backup_count=5):
+    logger = logging.getLogger("CryptoLedger")
+    logger.setLevel(logging.DEBUG)
+    
+    if logger.hasHandlers():
+        logger.handlers.clear()
 
-        # console fallback
-        console = logging.StreamHandler()
-        console.setFormatter(formatter)
-        self.logger.addHandler(console)
+    fmt = "[%(asctime)s] [%(levelname)s] [Prev: %(prev_hash)s] [Curr: %(curr_hash)s] %(message)s"
+    formatter = LedgerFormatter(fmt, datefmt="%Y-%m-%d %H:%M:%S")
 
-    def get_logger(self):
-        return self.logger
+    file_handler = RotatingFileHandler(
+        log_file, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
+    )
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(logging.DEBUG)
 
-# setup instance for automation-tool-56 usage
-logger = CryptoLogger().get_logger()
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(logging.INFO)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    return logger
