@@ -1,33 +1,37 @@
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+from pathlib import Path
 
-def get_crypto_logger(name='automation-tool-56', log_file='crypto_engine.log'):
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
+class CryptoLogger:
+    def __init__(self, name='crypto_node', log_dir='logs', max_bytes=5*1024*1024, backup_count=3):
+        self.log_path = Path(log_dir)
+        self.log_path.mkdir(exist_ok=True)
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(logging.DEBUG)
+        
+        # using a custom formatter with hex-like aesthetics for blockchain tracking
+        formatter = logging.Formatter(
+            '[%(asctime)s] 0x%(levelname)s - %(name)s::%(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
 
-    formatter = logging.Formatter(
-        '[%(asctime)s] [%(levelname)s] [%(filename)s:%(lineno)d] - %(message)s'
-    )
+        # rotating handler for high frequency crypto-log volume
+        handler = RotatingFileHandler(
+            self.log_path / f'{name}.log',
+            maxBytes=max_bytes,
+            backupCount=backup_count
+        )
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
 
-    file_handler = RotatingFileHandler(
-        log_file, 
-        maxBytes=1024 * 1024 * 5, 
-        backupCount=5
-    )
-    file_handler.setFormatter(formatter)
+        # console fallback
+        console = logging.StreamHandler()
+        console.setFormatter(formatter)
+        self.logger.addHandler(console)
 
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
+    def get_logger(self):
+        return self.logger
 
-    if not logger.handlers:
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
-
-    return logger
-
-if __name__ == '__main__':
-    # usage for crypto tracking
-    log = get_crypto_logger()
-    log.info('order execution module initialized')
-    log.debug('api latency check: 42ms')
+# setup instance for automation-tool-56 usage
+logger = CryptoLogger().get_logger()
