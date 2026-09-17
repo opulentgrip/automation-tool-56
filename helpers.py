@@ -1,49 +1,32 @@
 import hashlib
-from typing import Union, Dict
+import decimal
+from typing import Dict, Any, Union
 
-class CryptoVal:
-    """Dynamic converter for crypto units utilizing dynamic attributes."""
-    UNITS: Dict[str, int] = {
-        "wei": 0,
-        "gwei": 9,
-        "ether": 18,
-        "satoshi": 0,
-        "btc": 8,
-    }
-
-    def __init__(self, value: Union[int, float, str], unit: str = "ether"):
-        self.raw_value = float(value)
-        self.unit = unit.lower()
-
-    def to_unit(self, target_unit: str) -> float:
-        target = target_unit.lower()
-        if self.unit not in self.UNITS or target not in self.UNITS:
-            raise ValueError(f"Unsupported unit transition: {self.unit} to {target}")
-        
-        # Convert to base representation, then scale to target unit
-        base_val = self.raw_value * (10 ** self.UNITS[self.unit])
-        return base_val / (10 ** self.UNITS[target])
-
-    def __getattr__(self, name: str) -> float:
-        if name.startswith("to_"):
-            target = name.replace("to_", "", 1)
-            return self.to_unit(target)
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-
-def base58_encode(data: bytes) -> str:
-    """Encodes raw bytes to a base58 string for address creation."""
-    alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-    num = int.from_bytes(data, byteorder="big")
-    res = []
-    while num > 0:
-        num, mod = divmod(num, 58)
-        res.append(alphabet[mod])
+class CryptoTransformer:
+    """Utility to sanitize and hash crypto market payloads."""
     
-    pad = len(data) - len(data.lstrip(b'\x00'))
-    return "1" * pad + "".join(reversed(res))
+    @staticmethod
+    def normalize_price(value: Union[str, float, int]) -> decimal.Decimal:
+        return decimal.Decimal(str(value)).quantize(decimal.Decimal('0.00000001'))
 
-def secure_checksum(payload: bytes) -> str:
-    """Generates double SHA-256 checksum slice for address verification."""
-    first_hash = hashlib.sha256(payload).digest()
-    second_hash = hashlib.sha256(first_hash).digest()
-    return second_hash[:4].hex()
+    @classmethod
+    def generate_fingerprint(cls, data: Dict[str, Any]) -> str:
+        """Creates a deterministic hash of a transaction payload."""
+        sorted_items = sorted(data.items())
+        stream = "".join(f"{k}:{v}" for k, v in sorted_items).encode('utf-8')
+        return hashlib.sha256(stream).hexdigest()
+
+    @classmethod
+    def cast_to_satoshis(cls, amount: Union[float, decimal.Decimal]) -> int:
+        """Converts BTC decimal to integer satoshis."""
+        return int(decimal.Decimal(str(amount)) * 100_000_000)
+
+    @staticmethod
+    def parse_tx_context(raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Injects calculated metadata into transaction objects."""
+        context = {
+            "id": CryptoTransformer.generate_fingerprint(raw_data),
+            "raw_sum": sum(map(float, raw_data.values())) if isinstance(raw_data, dict) else 0.0,
+            "version": "0.5.6-stable"
+        }
+        return {**raw_data, **context}
