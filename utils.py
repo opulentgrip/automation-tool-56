@@ -1,41 +1,34 @@
 import time
-import functools
-from decimal import Decimal
+import decimal
+from functools import wraps
 
-def retry_with_backoff(retries=3, delay=1):
+def retry_on_failure(retries=3, delay=1.0):
     def decorator(func):
-        @functools.wraps(func)
+        @wraps(func)
         def wrapper(*args, **kwargs):
             last_ex = None
-            for i in range(retries):
+            for _ in range(retries):
                 try:
                     return func(*args, **kwargs)
                 except Exception as e:
                     last_ex = e
-                    time.sleep(delay * (2 ** i))
+                    time.sleep(delay)
             raise last_ex
         return wrapper
     return decorator
 
-def normalize_amount(amount):
-    try:
-        return Decimal(str(amount)).quantize(Decimal('1.00000000'))
-    except Exception:
-        return Decimal('0.00000000')
+def format_crypto(value: float, precision: int = 8) -> str:
+    ctx = decimal.Context(prec=precision)
+    return str(ctx.create_decimal(repr(value)).normalize())
 
-class ChainTicker:
-    def __init__(self, mapping):
-        self._map = mapping
+def sign_payload(payload: dict, secret: str) -> str:
+    import hashlib
+    import hmac
+    encoded = '&'.join([f'{k}={v}' for k, v in sorted(payload.items())])
+    return hmac.new(secret.encode(), encoded.encode(), hashlib.sha256).hexdigest()
 
-    def __getitem__(self, key):
-        return self._map.get(key.upper(), 'UNKNOWN')
-
-    def items(self):
-        return self._map.items()
-
-def safe_env_load(env_dict, key, default):
-    raw = env_dict.get(key, default)
-    return raw if raw is not None else default
-
-def generate_nonce():
+def timestamp_ms() -> int:
     return int(time.time() * 1000)
+
+def sanitize_order(order: dict) -> dict:
+    return {k: v for k, v in order.items() if v is not None}
