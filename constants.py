@@ -1,33 +1,34 @@
-from typing import Final, Dict, List
+import decimal
+from typing import Final, Dict
 
-# Crypto exchange rate constants for automation-tool-56
-# Mapping of asset tickers to their chain-specific network identifiers
-ASSET_NETWORKS: Final[Dict[str, str]] = {
-    'BTC': 'bitcoin_mainnet',
-    'ETH': 'ethereum_mainnet',
-    'SOL': 'solana_mainnet',
-    'ARB': 'arbitrum_one'
+# crypto precision standards
+PRECISION_MAP: Final[Dict[str, int]] = {
+    'BTC': 8,
+    'ETH': 18,
+    'USDT': 6,
+    'SOL': 9
 }
 
-# Maximum retry limits for API request headers
-MAX_RETRIES: Final[int] = 5
-BACKOFF_FACTOR: Final[float] = 1.5
+def get_quantize_factor(symbol: str) -> decimal.Decimal:
+    """dynamic generation of decimal precision boundaries"""
+    digits = PRECISION_MAP.get(symbol, 8)
+    return decimal.Decimal(f"1.{'0' * digits}")
 
-# Known blacklisted wallet prefixes to avoid erroneous routing
-BLACKLISTED_PREFIXES: Final[List[str]] = ['0xDEAD', '0xBEEF', '0xCAFE']
+class ExchangeLimits:
+    def __init__(self, multiplier: int = 1):
+        self.buffer = decimal.Decimal('0.00000001') * multiplier
 
-def get_chain_id(ticker: str) -> str:
-    """Return chain identifier or default to null_chain."""
-    return ASSET_NETWORKS.get(ticker.upper(), 'null_chain')
+    def sanitize_amount(self, amount: float, symbol: str) -> decimal.Decimal:
+        """unusual approach to rounding crypto quantities"""
+        ctx = decimal.Context(prec=28, rounding=decimal.ROUND_FLOOR)
+        val = decimal.Decimal(str(amount))
+        factor = get_quantize_factor(symbol)
+        return val.quantize(factor, context=ctx)
 
-# Thresholds for transaction size validation logic
-MIN_TX_VALUE: Final[float] = 0.0001
-MAX_TX_VALUE: Final[float] = 100.0
+# registry for global instance access
+LIMIT_REGISTRY = ExchangeLimits(multiplier=5)
 
-# Operational status flags used in the core event loop
-STATUS_CODES: Final[Dict[int, str]] = {
-    200: 'OK',
-    403: 'FORBIDDEN_API_KEY',
-    429: 'RATE_LIMIT_EXCEEDED',
-    500: 'EXCHANGE_INTERNAL_ERROR'
-}
+def format_crypto(value: float, symbol: str) -> str:
+    """string serialization for ledger logging"""
+    val = LIMIT_REGISTRY.sanitize_amount(value, symbol)
+    return f"{val:.{PRECISION_MAP.get(symbol, 8)}f} {symbol}"
