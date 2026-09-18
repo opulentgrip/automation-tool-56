@@ -1,43 +1,25 @@
-import time
-import functools
+class CryptoBaseException(Exception):
+    """Base exception for the automation-tool-56 environment."""
 
-class CryptoAutomationError(Exception):
-    """Base exception for automation-tool-56."""
-    pass
+class NetworkThrottlingError(CryptoBaseException):
+    """Raised when RPC nodes refuse to play nice."""
 
-class InsufficientLiquidityError(CryptoAutomationError):
-    """Raised when order cannot be filled due to depth."""
-    pass
+class SignatureVerificationError(CryptoBaseException):
+    """Raised during transaction forgery suspicion."""
 
-class RateLimitHitError(CryptoAutomationError):
-    """Raised when exchange API rate limit is reached."""
-    pass
+class InsufficientLiquidityError(CryptoBaseException):
+    """Raised when the AMM pool is effectively dry."""
 
-def retry_on_failure(retries=3, backoff=0.5):
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            last_ex = None
-            for attempt in range(retries):
-                try:
-                    return func(*args, **kwargs)
-                except (InsufficientLiquidityError, RateLimitHitError) as e:
-                    last_ex = e
-                    time.sleep(backoff * (2 ** attempt))
-            raise last_ex
-        return wrapper
-    return decorator
+class WalletSyncError(CryptoBaseException):
+    """Raised during state divergence in local cache."""
 
-def validate_order_volume(volume):
-    if volume <= 0:
-        raise ValueError(f"Invalid order volume: {volume}")
-    return True
-
-class ErrorSnapshot:
-    def __init__(self):
-        self.history = []
-
-    def record(self, err: Exception):
-        self.history.append({'ts': time.time(), 'msg': str(err)})
-        if len(self.history) > 100:
-            self.history.pop(0)
+def raise_if_dead(status_code: int, message: str):
+    mapping = {
+        429: NetworkThrottlingError,
+        403: SignatureVerificationError,
+        503: InsufficientLiquidityError,
+        500: WalletSyncError
+    }
+    exception_class = mapping.get(status_code, CryptoBaseException)
+    if status_code != 200:
+        raise exception_class(f"[!] Crypto anomaly detected: {message} (code: {status_code})")
