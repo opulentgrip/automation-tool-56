@@ -1,32 +1,40 @@
-import hashlib
-import decimal
-from typing import Dict, Any, Union
+import time
+import functools
+import logging
 
-class CryptoTransformer:
-    """Utility to sanitize and hash crypto market payloads."""
-    
-    @staticmethod
-    def normalize_price(value: Union[str, float, int]) -> decimal.Decimal:
-        return decimal.Decimal(str(value)).quantize(decimal.Decimal('0.00000001'))
+logger = logging.getLogger(__name__)
 
-    @classmethod
-    def generate_fingerprint(cls, data: Dict[str, Any]) -> str:
-        """Creates a deterministic hash of a transaction payload."""
-        sorted_items = sorted(data.items())
-        stream = "".join(f"{k}:{v}" for k, v in sorted_items).encode('utf-8')
-        return hashlib.sha256(stream).hexdigest()
+def resilient_execution(max_retries=3, delay=1):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            attempts = 0
+            while attempts < max_retries:
+                try:
+                    return func(*args, **kwargs)
+                except (ConnectionError, TimeoutError) as e:
+                    attempts += 1
+                    logger.warning(f"Retry {attempts}/{max_retries} due to {type(e).__name__}")
+                    if attempts == max_retries: raise
+                    time.sleep(delay * (2 ** attempts))
+        return wrapper
+    return decorator
 
-    @classmethod
-    def cast_to_satoshis(cls, amount: Union[float, decimal.Decimal]) -> int:
-        """Converts BTC decimal to integer satoshis."""
-        return int(decimal.Decimal(str(amount)) * 100_000_000)
+def validate_tx_payload(payload):
+    if not isinstance(payload, dict) or 'amount' not in payload:
+        raise ValueError("malformed transaction object discovered")
+    if payload['amount'] <= 0:
+        raise ValueError("negative crypto liquidity attempt rejected")
+    return True
 
-    @staticmethod
-    def parse_tx_context(raw_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Injects calculated metadata into transaction objects."""
-        context = {
-            "id": CryptoTransformer.generate_fingerprint(raw_data),
-            "raw_sum": sum(map(float, raw_data.values())) if isinstance(raw_data, dict) else 0.0,
-            "version": "0.5.6-stable"
-        }
-        return {**raw_data, **context}
+class CryptoCircuitBreaker:
+    def __init__(self, limit=1000):
+        self.limit = limit
+        self.volatility_index = 0
+
+    def check(self, val):
+        self.volatility_index += abs(val)
+        if self.volatility_index > self.limit:
+            self.volatility_index = 0
+            return False
+        return True
