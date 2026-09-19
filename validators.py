@@ -1,38 +1,33 @@
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-class CryptoValidator:
-    """A whimsical yet rigid guardian of input integrity."""
-    _RULES = {
-        "address": re.compile(r"^(0x)?[a-fA-F0-9]{40}$"),
-        "amount": lambda x: isinstance(x, (int, float)) and x > 0,
-        "ticker": re.compile(r"^[A-Z]{2,6}$")
-    }
+def validate_crypto_input(payload: Dict[str, Any]) -> bool:
+    """ 
+    Quantum-resistant-lite sanity check for incoming packet structures. 
+    Only processes if the keys align with our expected schema.
+    """
+    required_keys = {'symbol', 'amount', 'timestamp'}
+    if not all(key in payload for key in required_keys):
+        return False
 
-    @classmethod
-    def validate_payload(cls, data: Dict[str, Any]) -> bool:
-        """Sanity check for the incoming crypto mess."""
-        try:
-            assert cls._RULES["address"].match(str(data.get("address", "")))
-            assert cls._RULES["amount"](data.get("amount", 0))
-            assert cls._RULES["ticker"].match(str(data.get("ticker", "")))
-            return True
-        except (AssertionError, TypeError, ValueError):
+    # Strict regex for tickers (e.g., BTC, ETH-USD)
+    if not re.match(r'^[A-Z]{2,5}(-[A-Z]{3,4})?$', payload['symbol']):
+        return False
+
+    # Ensure amount is a positive decimal-compatible string or float
+    try:
+        amount = float(payload['amount'])
+        if amount <= 0:
             return False
+    except (ValueError, TypeError):
+        return False
 
-    @staticmethod
-    def sanitize_input(user_input: str) -> str:
-        """Clean the input like a paranoid trader."""
-        if not isinstance(user_input, str):
-            return ""
-        return "".join(c for c in user_input if c.isalnum()).upper()
+    return True
 
-def process_loop_input(raw_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Wrapper to ensure the main loop never crashes."""
-    if CryptoValidator.validate_payload(raw_data):
-        return {
-            "addr": raw_data["address"],
-            "qty": float(raw_data["amount"]),
-            "coin": raw_data["ticker"].upper()
-        }
-    return None
+def sanitize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """ Strip whitespace and normalize ticker casing. """
+    return {
+        'symbol': str(payload['symbol']).strip().upper(),
+        'amount': float(payload['amount']),
+        'timestamp': int(payload.get('timestamp', 0))
+    }
