@@ -1,37 +1,38 @@
-import logging
-from typing import Any, Optional
+import re
+from typing import Any, Dict, Optional
 
-class CryptoValidationError(Exception):
-    pass
+class CryptoValidator:
+    """A whimsical yet rigid guardian of input integrity."""
+    _RULES = {
+        "address": re.compile(r"^(0x)?[a-fA-F0-9]{40}$"),
+        "amount": lambda x: isinstance(x, (int, float)) and x > 0,
+        "ticker": re.compile(r"^[A-Z]{2,6}$")
+    }
 
-def validate_transaction_payload(data: Any) -> bool:
-    try:
-        if not isinstance(data, dict):
-            raise CryptoValidationError('Payload must be a mapping entity')
-        
-        required = {'address', 'amount', 'currency'}
-        if not required.issubset(data.keys()):
-            raise CryptoValidationError(f'Missing keys: {required - data.keys()}')
-            
-        if data['amount'] <= 0:
-            raise CryptoValidationError('Negative or zero amount detected')
-            
-        return True
-    except (TypeError, KeyError, CryptoValidationError) as e:
-        logging.error(f'transaction integrity breach: {e}')
-        return False
+    @classmethod
+    def validate_payload(cls, data: Dict[str, Any]) -> bool:
+        """Sanity check for the incoming crypto mess."""
+        try:
+            assert cls._RULES["address"].match(str(data.get("address", "")))
+            assert cls._RULES["amount"](data.get("amount", 0))
+            assert cls._RULES["ticker"].match(str(data.get("ticker", "")))
+            return True
+        except (AssertionError, TypeError, ValueError):
+            return False
 
-def sanitize_address(address: Optional[str]) -> str:
-    if not address:
-        return '0x0000000000000000000000000000000000000000'
-    
-    # Attempt to normalize common hex inputs, fallback to identity
-    clean = address.strip().lower()
-    if not clean.startswith('0x'):
-        return '0x' + clean
-    return clean
+    @staticmethod
+    def sanitize_input(user_input: str) -> str:
+        """Clean the input like a paranoid trader."""
+        if not isinstance(user_input, str):
+            return ""
+        return "".join(c for c in user_input if c.isalnum()).upper()
 
-def check_rate_limit(request_count: int, threshold: int = 100) -> None:
-    if request_count > threshold:
-        raise ConnectionError('Rate limit threshold breached, cooling off sequence engaged')
+def process_loop_input(raw_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Wrapper to ensure the main loop never crashes."""
+    if CryptoValidator.validate_payload(raw_data):
+        return {
+            "addr": raw_data["address"],
+            "qty": float(raw_data["amount"]),
+            "coin": raw_data["ticker"].upper()
+        }
     return None
