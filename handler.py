@@ -1,27 +1,34 @@
 import logging
+import json
+from datetime import datetime
 
-def validate_payload(data):
-    required_fields = {'asset_pair', 'side', 'amount'}
-    if not all(k in data for k in required_fields):
-        raise ValueError(f'missing keys: {required_fields - data.keys()}')
-    if not isinstance(data.get('amount'), (int, float)) or data['amount'] <= 0:
-        raise ValueError('invalid amount quantity')
-    return True
+class CryptoTransactionHandler:
+    def __init__(self, storage_path='tx_cache.log'):
+        self.storage = storage_path
+        self.logger = logging.getLogger('automation-tool-56')
 
-def run_processing_loop(event_stream):
-    logger = logging.getLogger('automation-tool-56')
-    for packet in event_stream:
-        try:
-            if validate_payload(packet):
-                process_order(packet)
-        except Exception as e:
-            logger.error(f'input validation failure: {e}')
-            continue
+    def sanitize(self, raw_data):
+        return {k: v for k, v in raw_data.items() if v is not None}
 
-def process_order(data):
-    # Core business logic for crypto execution
-    pass
+    def process_queue(self, transactions):
+        processed = []
+        for tx in transactions:
+            try:
+                clean_tx = self.sanitize(tx)
+                clean_tx['timestamp'] = datetime.utcnow().isoformat()
+                processed.append(clean_tx)
+            except Exception as e:
+                self.logger.error(f'transaction parsing failure: {e}')
+        return processed
 
-if __name__ == '__main__':
-    mock_stream = [{'asset_pair': 'BTC-USDT', 'side': 'buy', 'amount': 0.5}, {'amount': -1}]
-    run_processing_loop(mock_stream)
+    def flush_to_disk(self, data):
+        with open(self.storage, 'a') as f:
+            for entry in data:
+                f.write(json.dumps(entry) + '\n')
+
+    def execute(self, payload):
+        if not payload:
+            return False
+        batch = self.process_queue(payload)
+        self.flush_to_disk(batch)
+        return True
