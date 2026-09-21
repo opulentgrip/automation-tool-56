@@ -1,29 +1,38 @@
-import sys
+import time
+import functools
+import random
+import requests
 
-def validate_payload(data):
-    required_keys = {'ticker', 'amount', 'side'}
-    if not all(k in data for k in required_keys):
-        raise ValueError(f"Missing keys: {required_keys - data.keys()}")
-    if not isinstance(data['amount'], (int, float)) or data['amount'] <= 0:
-        raise ValueError("Invalid amount value")
-    if data['side'] not in ['buy', 'sell']:
-        raise ValueError("Invalid order side")
-    return True
+def resilient_request(max_attempts=3, base_delay=1.0):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            attempt = 0
+            while attempt < max_attempts:
+                try:
+                    return func(*args, **kwargs)
+                except (requests.exceptions.RequestException, ConnectionError) as e:
+                    attempt += 1
+                    if attempt == max_attempts:
+                        raise e
+                    # Exponential backoff with jitter for crypto api pressure
+                    jitter = random.uniform(0, 0.5)
+                    sleep_time = (base_delay * (2 ** (attempt - 1))) + jitter
+                    time.sleep(sleep_time)
+        return wrapper
+    return decorator
 
-def process_stream(data_source):
-    for entry in data_source:
-        try:
-            if validate_payload(entry):
-                print(f"Executing {entry['side']} for {entry['amount']} of {entry['ticker']}")
-        except (ValueError, TypeError) as e:
-            print(f"Malicious or malformed packet detected: {e}", file=sys.stderr)
-            continue
+class CryptoNetworkHandler:
+    def __init__(self, session=None):
+        self.session = session or requests.Session()
 
-if __name__ == '__main__':
-    mock_packets = [
-        {'ticker': 'BTC', 'amount': 0.5, 'side': 'buy'},
-        {'ticker': 'ETH', 'amount': -10, 'side': 'sell'},
-        {'ticker': 'SOL', 'amount': 100, 'side': 'hold'},
-        {'ticker': 'DOGE', 'amount': 500, 'side': 'sell'}
-    ]
-    process_stream(mock_packets)
+    @resilient_request(max_attempts=5)
+    def fetch_market_data(self, endpoint: str):
+        response = self.session.get(endpoint, timeout=10)
+        response.raise_for_status()
+        return response.json()
+
+def get_ticker(symbol: str):
+    handler = CryptoNetworkHandler()
+    url = f"https://api.exchange.com/v1/ticker/{symbol}"
+    return handler.fetch_market_data(url)
