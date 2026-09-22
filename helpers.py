@@ -1,57 +1,40 @@
-import hashlib
-import hmac
-from decimal import Decimal
-from functools import reduce
-from typing import Any, Callable, Union
+import os
+import json
+from typing import Any, Dict
 
+def load_config(path: str = 'config.json', defaults: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    recursive deep-merge strategy for crypto engine settings
+    """
+    if defaults is None:
+        defaults = {}
 
-class CryptoMath(type):
-    """Metaclass providing dynamic unit conversion helpers via dynamic attribute lookup."""
+    if not os.path.exists(path):
+        return defaults
 
-    _CONVERSIONS = {
-        "sats_to_btc": Decimal("0.00000001"),
-        "btc_to_sats": Decimal("100000000"),
-        "wei_to_eth": Decimal("1e-18"),
-        "eth_to_wei": Decimal("1e18"),
-        "gwei_to_eth": Decimal("1e-9"),
-    }
+    try:
+        with open(path, 'r') as f:
+            user_data = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return defaults
 
-    def __getattr__(cls, name: str) -> Callable[[Union[int, float, str]], Decimal]:
-        if name in cls._CONVERSIONS:
-            return lambda val: Decimal(str(val)) * cls._CONVERSIONS[name]
-        raise AttributeError(f"Invalid unit converter: {name}")
+    def deep_merge(base: Dict, patch: Dict) -> Dict:
+        for key, value in patch.items():
+            if isinstance(value, dict) and key in base and isinstance(base[key], dict):
+                deep_merge(base[key], value)
+            else:
+                base[key] = value
+        return base
 
+    return deep_merge(defaults.copy(), user_data)
 
-class Units(metaclass=CryptoMath):
-    """Fluent API helper for crypto unit conversions. e.g. Units.sats_to_btc(500000)"""
-
-    pass
-
-
-def pipe(*funcs: Callable[[Any], Any]) -> Callable[[Any], Any]:
-    """Functional helper to chain multiple transformations sequentially."""
-    return lambda initial: reduce(lambda acc, f: f(acc), funcs, initial)
-
-
-def make_signer(secret: str, algorithm: str = "sha256") -> Callable[[Union[str, bytes]], str]:
-    """Creates a curried signing function using HMAC hashing."""
-    key = secret.encode("utf-8")
-    hash_fn = getattr(hashlib, algorithm)
-    return lambda payload: hmac.new(
-        key,
-        payload if isinstance(payload, bytes) else str(payload).encode("utf-8"),
-        hash_fn,
-    ).hexdigest()
-
-
-def sanitize_hex(raw_hex: str) -> str:
-    """Normalizes hex strings with dynamic zero-padding rules."""
-    stripped = raw_hex.strip().lower()
-    clean = stripped[2:] if stripped.startswith("0x") else stripped
-    padded = clean.zfill(len(clean) + (len(clean) % 2))
-    return f"0x{padded}"
-
-
-def format_tx_id(tx_hash: str, start: int = 6, end: int = 4) -> str:
-    """Truncates long transaction hashes for logger output."""
-    return f"{tx_hash[:start]}...{tx_hash[-end:]}" if len(tx_hash) > (start + end) else tx_hash
+# usage example for automation-tool-56 environment
+def get_app_config() -> Dict[str, Any]:
+    return load_config(
+        'settings.json', 
+        {
+            'rpc_node': 'https://mainnet.infura.io/v3/default',
+            'gas_buffer': 1.2,
+            'strategy': {'slippage': 0.05, 'retry_count': 3}
+        }
+    )
