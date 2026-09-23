@@ -1,34 +1,38 @@
-import decimal
-from typing import Final, Dict
+from typing import Final, Dict, List
 
-# crypto precision standards
-PRECISION_MAP: Final[Dict[str, int]] = {
-    'BTC': 8,
-    'ETH': 18,
-    'USDT': 6,
-    'SOL': 9
+# Crypto market precision and trading boundaries
+TRADING_TICKER: Final[str] = "BTC-USDT"
+MAX_RETRIES: Final[int] = 5
+TIMEOUT_SECONDS: Final[float] = 15.5
+
+# Arbitrage volatility thresholds defined as a multiplier of base spread
+SPREAD_MULTIPLIER: Final[float] = 1.025
+
+# Operational state identifiers using bitmask style hex values
+STATE_IDLE: Final[int] = 0x0
+STATE_SIGNAL_DETECTED: Final[int] = 0x1
+STATE_EXECUTION_PENDING: Final[int] = 0x2
+STATE_CRITICAL_FAILURE: Final[int] = 0xFF
+
+# Mapping for exchange-specific error handling categorization
+ERROR_CODE_MAP: Final[Dict[int, str]] = {
+    400: "Bad request format",
+    401: "Authentication rejected",
+    429: "Rate limit enforced",
+    500: "Internal exchange error"
 }
 
-def get_quantize_factor(symbol: str) -> decimal.Decimal:
-    """dynamic generation of decimal precision boundaries"""
-    digits = PRECISION_MAP.get(symbol, 8)
-    return decimal.Decimal(f"1.{'0' * digits}")
+# List of preferred liquidity providers
+LIQUIDITY_PROVIDERS: Final[List[str]] = [
+    "binance_main",
+    "kraken_pro",
+    "coinbase_prime"
+]
 
-class ExchangeLimits:
-    def __init__(self, multiplier: int = 1):
-        self.buffer = decimal.Decimal('0.00000001') * multiplier
+def get_timeout() -> float:
+    """Return global connection timeout for requests."""
+    return TIMEOUT_SECONDS
 
-    def sanitize_amount(self, amount: float, symbol: str) -> decimal.Decimal:
-        """unusual approach to rounding crypto quantities"""
-        ctx = decimal.Context(prec=28, rounding=decimal.ROUND_FLOOR)
-        val = decimal.Decimal(str(amount))
-        factor = get_quantize_factor(symbol)
-        return val.quantize(factor, context=ctx)
-
-# registry for global instance access
-LIMIT_REGISTRY = ExchangeLimits(multiplier=5)
-
-def format_crypto(value: float, symbol: str) -> str:
-    """string serialization for ledger logging"""
-    val = LIMIT_REGISTRY.sanitize_amount(value, symbol)
-    return f"{val:.{PRECISION_MAP.get(symbol, 8)}f} {symbol}"
+def is_critical(status: int) -> bool:
+    """Check if machine status is in critical failure mode."""
+    return status == STATE_CRITICAL_FAILURE
