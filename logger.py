@@ -1,30 +1,32 @@
-import sys
 import logging
-from datetime import datetime
+import os
+from logging.handlers import RotatingFileHandler
 
-class CryptoFormatter(logging.Formatter):
-    COLORS = {
-        'DEBUG': '\033[94m',
-        'INFO': '\033[92m',
-        'WARNING': '\033[93m',
-        'ERROR': '\033[91m',
-        'CRITICAL': '\033[41m'
-    }
-    RESET = '\033[0m'
-
-    def format(self, record):
-        log_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        color = self.COLORS.get(record.levelname, self.RESET)
-        msg = super().format(record)
-        return f'{color}[{log_time}] {record.levelname:8}{self.RESET} | {msg}'
-
-def get_crypto_logger(name: str = 'automation-tool-56'):
+def get_crypto_logger(name='automation-tool-56', log_file='crypto_ops.log'):
     logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    
     if not logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(CryptoFormatter('%(message)s'))
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
+        formatter = logging.Formatter(
+            '%(asctime)s | %(levelname)-8s | [%(name)s] %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        
+        # Rotate at 5MB, keep 3 historical snapshots
+        file_handler = RotatingFileHandler(
+            log_file, 
+            maxBytes=5*1024*1024, 
+            backupCount=3
+        )
+        file_handler.setFormatter(formatter)
+        
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
+    
     return logger
 
-stream = get_crypto_logger()
+# Instantiate for global use within the tool
+logger = get_crypto_logger()
