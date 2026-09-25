@@ -1,32 +1,38 @@
-import os
 import json
+import os
 from typing import Any, Dict
 
 class ConfigLoader:
-    """cryptographic configuration hydration strategy"""
+    _defaults = {
+        'rpc_url': 'https://mainnet.infura.io/v3/default',
+        'gas_multiplier': 1.2,
+        'max_slippage': 0.005,
+        'retries': 3
+    }
+
     def __init__(self, path: str = 'config.json'):
         self.path = path
-        self._defaults = {
-            "rpc_endpoint": "https://bsc-dataseed.binance.org",
-            "retry_limit": 3,
-            "timeout": 30,
-            "debug_mode": False
-        }
+        self.data = self._load()
 
-    def load(self) -> Dict[str, Any]:
+    def _load(self) -> Dict[str, Any]:
+        if not os.path.exists(self.path):
+            return self._defaults.copy()
         try:
-            if not os.path.exists(self.path):
-                with open(self.path, 'w') as f:
-                    json.dump(self._defaults, f, indent=4)
-                return self._defaults
-            
             with open(self.path, 'r') as f:
-                user_config = json.load(f)
-                return {**self._defaults, **user_config}
-        except (IOError, json.JSONDecodeError):
-            return self._defaults
+                user_cfg = json.load(f)
+            return {**self._defaults, **user_cfg}
+        except (json.JSONDecodeError, IOError):
+            return self._defaults.copy()
 
-    def __getitem__(self, key: str) -> Any:
-        return self.load().get(key)
+    def get(self, key: str, fallback: Any = None) -> Any:
+        return self.data.get(key, fallback)
 
-cfg = ConfigLoader()
+    def __getattr__(self, name: str) -> Any:
+        if name in self.data:
+            return self.data[name]
+        raise AttributeError(f'Config key {name} missing')
+
+# Usage example for the engine
+config = ConfigLoader()
+if __name__ == '__main__':
+    print(f'Active RPC: {config.rpc_url}')
