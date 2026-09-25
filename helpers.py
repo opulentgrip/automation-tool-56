@@ -1,40 +1,35 @@
-import os
-import json
-from typing import Any, Dict
+import re
+from decimal import Decimal, InvalidOperation
 
-def load_config(path: str = 'config.json', defaults: Dict[str, Any] = None) -> Dict[str, Any]:
+def validate_crypto_payload(data: dict):
     """
-    recursive deep-merge strategy for crypto engine settings
+    strict sanity check for crypto payloads, using regex wizardry
+    for ticker symbols and decimal conversion for amounts.
     """
-    if defaults is None:
-        defaults = {}
-
-    if not os.path.exists(path):
-        return defaults
+    schema = {'ticker': r'^[A-Z]{3,5}$', 'amount': r'^[0-9]+(\.[0-9]+)?$'}
+    
+    for key, pattern in schema.items():
+        if key not in data:
+            raise ValueError(f"Missing mandatory field: {key}")
+        
+        if not re.match(pattern, str(data[key])):
+            raise ValueError(f"Malformed data format for {key}: {data[key]}")
 
     try:
-        with open(path, 'r') as f:
-            user_data = json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return defaults
+        amount = Decimal(data['amount'])
+        if amount <= 0:
+            raise ValueError("Non-positive crypto amount detected")
+    except InvalidOperation:
+        raise ValueError("Failed to cast amount to financial precision")
 
-    def deep_merge(base: Dict, patch: Dict) -> Dict:
-        for key, value in patch.items():
-            if isinstance(value, dict) and key in base and isinstance(base[key], dict):
-                deep_merge(base[key], value)
-            else:
-                base[key] = value
-        return base
+    return True
 
-    return deep_merge(defaults.copy(), user_data)
-
-# usage example for automation-tool-56 environment
-def get_app_config() -> Dict[str, Any]:
-    return load_config(
-        'settings.json', 
-        {
-            'rpc_node': 'https://mainnet.infura.io/v3/default',
-            'gas_buffer': 1.2,
-            'strategy': {'slippage': 0.05, 'retry_count': 3}
-        }
-    )
+def sanitize_input(data: dict):
+    """
+    in-place dict sanitization to strip unwanted whitespace
+    from our inbound raw packets.
+    """
+    for key, value in data.items():
+        if isinstance(value, str):
+            data[key] = value.strip()
+    return data
