@@ -1,38 +1,36 @@
 import time
-import functools
 import random
-import requests
+import functools
+from typing import Callable, Any
 
-def resilient_request(max_attempts=3, base_delay=1.0):
-    def decorator(func):
+def exponential_jitter_retry(max_attempts: int = 5, base_delay: float = 1.0):
+    def decorator(func: Callable):
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            attempt = 0
-            while attempt < max_attempts:
+        def wrapper(*args, **kwargs) -> Any:
+            last_ex = None
+            for attempt in range(max_attempts):
                 try:
                     return func(*args, **kwargs)
-                except (requests.exceptions.RequestException, ConnectionError) as e:
-                    attempt += 1
-                    if attempt == max_attempts:
-                        raise e
-                    # Exponential backoff with jitter for crypto api pressure
-                    jitter = random.uniform(0, 0.5)
-                    sleep_time = (base_delay * (2 ** (attempt - 1))) + jitter
+                except Exception as e:
+                    last_ex = e
+                    if attempt == max_attempts - 1:
+                        break
+                    sleep_time = (base_delay * (2 ** attempt)) + (random.random() * 0.1)
                     time.sleep(sleep_time)
+            raise last_ex
         return wrapper
     return decorator
 
-class CryptoNetworkHandler:
-    def __init__(self, session=None):
-        self.session = session or requests.Session()
+@exponential_jitter_retry(max_attempts=3)
+def fetch_crypto_price(ticker: str) -> float:
+    # Simulate volatile network state
+    if random.random() < 0.7:
+        raise ConnectionError(f"Node sync failure for {ticker}")
+    return random.uniform(1000.0, 60000.0)
 
-    @resilient_request(max_attempts=5)
-    def fetch_market_data(self, endpoint: str):
-        response = self.session.get(endpoint, timeout=10)
-        response.raise_for_status()
-        return response.json()
-
-def get_ticker(symbol: str):
-    handler = CryptoNetworkHandler()
-    url = f"https://api.exchange.com/v1/ticker/{symbol}"
-    return handler.fetch_market_data(url)
+if __name__ == "__main__":
+    try:
+        price = fetch_crypto_price("BTC")
+        print(f"Market price recovered: {price}")
+    except Exception as e:
+        print(f"Operation failed after retries: {e}")
