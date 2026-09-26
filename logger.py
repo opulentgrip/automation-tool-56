@@ -1,32 +1,25 @@
 import logging
-import os
-from logging.handlers import RotatingFileHandler
+import sys
+from datetime import datetime
 
-def get_crypto_logger(name='automation-tool-56', log_file='crypto_ops.log'):
+class CryptoFormatter(logging.Formatter):
+    COLORS = {'DEBUG': '\033[94m', 'INFO': '\033[92m', 'WARNING': '\033[93m', 'ERROR': '\033[91m'}
+    def format(self, record):
+        color = self.COLORS.get(record.levelname, '\033[0m')
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        return f"{color}[{timestamp}] {record.levelname}: {record.getMessage()}\033[0m"
+
+def get_crypto_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
-    
     if not logger.handlers:
-        formatter = logging.Formatter(
-            '%(asctime)s | %(levelname)-8s | [%(name)s] %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        
-        # Rotate at 5MB, keep 3 historical snapshots
-        file_handler = RotatingFileHandler(
-            log_file, 
-            maxBytes=5*1024*1024, 
-            backupCount=3
-        )
-        file_handler.setFormatter(formatter)
-        
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
-    
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(CryptoFormatter())
+        logger.addHandler(handler)
+        logger.setLevel(logging.DEBUG)
     return logger
 
-# Instantiate for global use within the tool
-logger = get_crypto_logger()
+def log_trade_event(logger: logging.Logger, pair: str, amount: float, price: float):
+    logger.info(f"EXECUTION: {pair} | QTY: {amount:.4f} @ ${price:.2f}")
+
+def log_anomaly(logger: logging.Logger, signal: str):
+    logger.error(f"ANOMALY DETECTED: {signal.upper()} - IMMEDIATE ATTENTION REQUIRED")
