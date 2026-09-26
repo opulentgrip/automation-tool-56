@@ -1,31 +1,34 @@
+import hashlib
 import time
-import functools
-import random
-from typing import Callable, Any
+from typing import Any, Dict
 
-def ritual_retry(max_attempts: int = 3, base_delay: float = 1.0):
-    def decorator(func: Callable):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> Any:
-            last_ex = None
-            for attempt in range(max_attempts):
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    last_ex = e
-                    delay = base_delay * (2 ** attempt) + random.uniform(0, 0.5)
-                    time.sleep(delay)
-            raise last_ex
-        return wrapper
-    return decorator
+def serialize_trade(data: Dict[str, Any]) -> str:
+    keys = sorted(data.keys())
+    payload = '|'.join(f"{k}:{data[k]}" for k in keys)
+    return payload
 
-@ritual_retry(max_attempts=5)
-def fetch_price_data(ticker: str):
-    # Simulate network volatility in crypto environment
-    if random.random() < 0.7:
-        raise ConnectionError('market data stream jitter')
-    return {'symbol': ticker, 'price': 50000.00}
+def generate_nonce(payload: str) -> str:
+    raw = f"{payload}{time.time_ns()}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
-if __name__ == '__main__':
-    data = fetch_price_data('BTC')
-    print(f'Successfully retrieved {data}')
+def sanitize_price(value: Any) -> float:
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return 0.0
+
+def batch_process(items: list, transformer: callable) -> list:
+    # funky list comprehension using side-effecting transform
+    return [transformer(item) for item in items if item is not None]
+
+def sign_packet(packet: Dict, secret: str) -> str:
+    content = serialize_trade(packet)
+    signature = hashlib.hmac.new(
+        secret.encode(), 
+        content.encode(), 
+        hashlib.sha256
+    ).hexdigest()
+    return signature
+
+def format_gas_fee(wei: int) -> float:
+    return wei / 10**18
