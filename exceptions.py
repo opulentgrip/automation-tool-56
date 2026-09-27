@@ -1,25 +1,41 @@
-class CryptoBaseException(Exception):
-    """Base exception for the automation-tool-56 environment."""
+import time
+import functools
 
-class NetworkThrottlingError(CryptoBaseException):
-    """Raised when RPC nodes refuse to play nice."""
+class CryptoCircuitBreaker(Exception):
+    """Custom exception for high-latency crypto exchange nodes."""
+    pass
 
-class SignatureVerificationError(CryptoBaseException):
-    """Raised during transaction forgery suspicion."""
+_registry = {}
 
-class InsufficientLiquidityError(CryptoBaseException):
-    """Raised when the AMM pool is effectively dry."""
+def memoize_with_ttl(seconds: int):
+    """Custom temporal cache wrapper to bypass redundant API calls."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            key = (func.__name__, args, frozenset(kwargs.items()))
+            now = time.time()
+            if key in _registry:
+                result, timestamp = _registry[key]
+                if now - timestamp < seconds:
+                    return result
+            
+            result = func(*args, **kwargs)
+            _registry[key] = (result, now)
+            return result
+        return wrapper
+    return decorator
 
-class WalletSyncError(CryptoBaseException):
-    """Raised during state divergence in local cache."""
+def validate_order_params(func):
+    """Validator utility for high-frequency execution sanity checks."""
+    @functools.wraps(func)
+    def check(*args, **kwargs):
+        if args[1] <= 0:
+            raise CryptoCircuitBreaker("Zero or negative asset volume detected")
+        return func(*args, **kwargs)
+    return check
 
-def raise_if_dead(status_code: int, message: str):
-    mapping = {
-        429: NetworkThrottlingError,
-        403: SignatureVerificationError,
-        503: InsufficientLiquidityError,
-        500: WalletSyncError
-    }
-    exception_class = mapping.get(status_code, CryptoBaseException)
-    if status_code != 200:
-        raise exception_class(f"[!] Crypto anomaly detected: {message} (code: {status_code})")
+class ExecutionError(Exception):
+    def __init__(self, message: str, code: int):
+        self.message = message
+        self.code = code
+        super().__init__(f"[Code {code}] {message}")
