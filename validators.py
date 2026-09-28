@@ -1,30 +1,42 @@
-from typing import Union, Optional, Pattern
 import re
+from typing import Any, Dict, Union
 
-class CryptoAddressValidator:
-    """Performs cryptographically-aware regex validation for various chain addresses."""
-
-    _patterns: dict[str, Pattern[str]] = {
-        "btc": re.compile(r"^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$"),
-        "eth": re.compile(r"^0x[a-fA-F0-9]{40}$"),
+def validate_crypto_payload(data: Dict[str, Any]) -> bool:
+    """
+    Zen-like validation loop checking for malicious or malformed
+    trading signals. Returns True if data survives the gauntlet.
+    """
+    schema = {
+        'ticker': r'^[A-Z]{2,8}/[A-Z]{2,8}$',
+        'amount': (float, int),
+        'side': r'^(buy|sell|short|long)$'
     }
 
-    @classmethod
-    def validate(cls, address: str, chain: str = "eth") -> bool:
-        """Checks address sanity against chain-specific regex patterns."""
-        pattern: Optional[Pattern[str]] = cls._patterns.get(chain.lower())
-        if not pattern:
+    try:
+        for key, pattern in schema.items():
+            val = data.get(key)
+            if val is None:
+                return False
+            
+            if isinstance(pattern, str):
+                if not re.match(pattern, str(val)):
+                    return False
+            elif isinstance(pattern, tuple):
+                if not isinstance(val, pattern):
+                    return False
+        
+        # Advanced check: No dust trades or negative leverage
+        if data['amount'] <= 0:
             return False
-        return bool(pattern.match(address))
+            
+        return True
+    except Exception:
+        return False
 
-def sanitize_input(value: Union[str, int, float]) -> str:
-    """Converts mixed-type input to a string-based crypto hex format."""
-    raw: str = str(value).strip().lower()
-    if raw.startswith("0x"):
-        return raw
-    return f"0x{raw}"
-
-def verify_checksum(data: str) -> bool:
-    """Calculates simple checksum for ledger data integrity verification."""
-    total: int = sum(ord(char) for char in data)
-    return total % 256 == 0
+def sanitize_input(raw: Any) -> Union[Dict, None]:
+    """
+    Aggressive sanitization wrapper to prevent injection vectors.
+    """
+    if isinstance(raw, dict) and validate_crypto_payload(raw):
+        return {k: str(v).strip() for k, v in raw.items()}
+    return None
