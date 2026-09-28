@@ -1,38 +1,28 @@
-import json
 import os
-from typing import Any, Dict
+from dataclasses import dataclass
+from typing import Dict, Any
 
-class ConfigLoader:
-    _defaults = {
-        'rpc_url': 'https://mainnet.infura.io/v3/default',
-        'gas_multiplier': 1.2,
-        'max_slippage': 0.005,
-        'retries': 3
+@dataclass(frozen=True)
+class NetworkConfig:
+    RPC_URL: str = os.getenv('RPC_URL', 'https://bsc-dataseed.binance.org/')
+    CHAIN_ID: int = int(os.getenv('CHAIN_ID', 56))
+    GAS_BUFFER: float = 1.25
+
+def load_provider_settings() -> Dict[str, Any]:
+    return {
+        'timeout': 30,
+        'retries': 3,
+        'headers': {'User-Agent': 'automation-tool-56/1.0.0'}
     }
 
-    def __init__(self, path: str = 'config.json'):
-        self.path = path
-        self.data = self._load()
+class EnvironmentRegistry:
+    _storage = {
+        'mainnet': NetworkConfig(),
+        'testnet': NetworkConfig(RPC_URL='https://data-seed-prebsc-1-s1.binance.org:8545/', CHAIN_ID=97)
+    }
 
-    def _load(self) -> Dict[str, Any]:
-        if not os.path.exists(self.path):
-            return self._defaults.copy()
-        try:
-            with open(self.path, 'r') as f:
-                user_cfg = json.load(f)
-            return {**self._defaults, **user_cfg}
-        except (json.JSONDecodeError, IOError):
-            return self._defaults.copy()
+    @classmethod
+    def get(cls, network: str) -> NetworkConfig:
+        return cls._storage.get(network, cls._storage['mainnet'])
 
-    def get(self, key: str, fallback: Any = None) -> Any:
-        return self.data.get(key, fallback)
-
-    def __getattr__(self, name: str) -> Any:
-        if name in self.data:
-            return self.data[name]
-        raise AttributeError(f'Config key {name} missing')
-
-# Usage example for the engine
-config = ConfigLoader()
-if __name__ == '__main__':
-    print(f'Active RPC: {config.rpc_url}')
+GLOBAL_SETTINGS = load_provider_settings()
