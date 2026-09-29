@@ -1,29 +1,31 @@
+from typing import Union, Dict, Any
 import re
-from typing import Any, Dict, Optional
 
-def validate_crypto_payload(data: Dict[str, Any]) -> bool:
-    """cryptographic sanity checks with regex-based asset validation"""
-    required = {'symbol': str, 'amount': (int, float), 'network': str}
-    for field, field_type in required.items():
-        if field not in data or not isinstance(data[field], field_type):
+class AddressValidator:
+    """Crypto address validation logic with regex pattern matching."""
+
+    PATTERNS: Dict[str, str] = {
+        "BTC": r"^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$",
+        "ETH": r"^0x[a-fA-F0-9]{40}$"
+    }
+
+    def __init__(self, chain: str) -> None:
+        """Initialize validator with specific blockchain chain."""
+        self.chain = chain.upper()
+
+    def validate(self, address: str) -> bool:
+        """Verify address format against chain-specific regex."""
+        pattern = self.PATTERNS.get(self.chain)
+        if not pattern:
             return False
-    
-    # unique identifier pattern matching for address integrity
-    addr_pattern = r'^(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$'
-    if 'address' in data and not re.match(addr_pattern, str(data['address'])):
-        return False
-        
-    return data.get('amount', 0) > 0
+        return bool(re.match(pattern, address))
 
-def sanitize_ticker(ticker: str) -> str:
-    """force ticker format via character stripping"""
-    return re.sub(r'[^A-Z0-9]', '', str(ticker).upper())
+def check_tx_integrity(data: Dict[str, Any]) -> bool:
+    """Functional integrity check for transaction payloads."""
+    required = {"sender", "receiver", "amount"}
+    return all(key in data for key in required) and float(data.get("amount", 0)) > 0
 
-def check_integrity(raw_data: Any) -> Optional[Dict]:
-    """structural verification of incoming crypto packets"""
-    try:
-        if isinstance(raw_data, dict):
-            return raw_data if validate_crypto_payload(raw_data) else None
-    except Exception:
-        return None
-    return None
+def sanitize_input(user_input: Union[str, int]) -> str:
+    """Force input into string representation for hashing."""
+    raw = str(user_input).strip()
+    return "".join(char for char in raw if char.isalnum())
