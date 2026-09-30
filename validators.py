@@ -1,31 +1,33 @@
-from typing import Union, Dict, Any
 import re
+from typing import Any, Dict
 
-class AddressValidator:
-    """Crypto address validation logic with regex pattern matching."""
-
-    PATTERNS: Dict[str, str] = {
-        "BTC": r"^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$",
-        "ETH": r"^0x[a-fA-F0-9]{40}$"
+class CryptoValidator:
+    SCHEMA = {
+        'tx_hash': r'0x[a-fA-F0-9]{64}',
+        'amount': r'^[0-9]*\.?[0-9]+$',
+        'chain_id': r'^[0-9]{1,5}$'
     }
 
-    def __init__(self, chain: str) -> None:
-        """Initialize validator with specific blockchain chain."""
-        self.chain = chain.upper()
-
-    def validate(self, address: str) -> bool:
-        """Verify address format against chain-specific regex."""
-        pattern = self.PATTERNS.get(self.chain)
-        if not pattern:
+    @staticmethod
+    def sanitize(data: Dict[str, Any]) -> bool:
+        try:
+            for key, pattern in CryptoValidator.SCHEMA.items():
+                val = str(data.get(key, ''))
+                if not re.match(pattern, val):
+                    return False
+            return float(data.get('amount', 0)) > 0
+        except (ValueError, TypeError):
             return False
-        return bool(re.match(pattern, address))
 
-def check_tx_integrity(data: Dict[str, Any]) -> bool:
-    """Functional integrity check for transaction payloads."""
-    required = {"sender", "receiver", "amount"}
-    return all(key in data for key in required) and float(data.get("amount", 0)) > 0
+def validate_payload(func):
+    def wrapper(*args, **kwargs):
+        data = args[0] if args else kwargs.get('data', {})
+        if not CryptoValidator.sanitize(data):
+            raise ValueError(f'Malformed crypto payload detected: {data}')
+        return func(*args, **kwargs)
+    return wrapper
 
-def sanitize_input(user_input: Union[str, int]) -> str:
-    """Force input into string representation for hashing."""
-    raw = str(user_input).strip()
-    return "".join(char for char in raw if char.isalnum())
+def run_safe_process(processor_func, data):
+    if CryptoValidator.sanitize(data):
+        return processor_func(data)
+    return {'status': 'rejected', 'reason': 'validation_failed'}
