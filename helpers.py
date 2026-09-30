@@ -1,35 +1,39 @@
-import re
-from decimal import Decimal, InvalidOperation
+import os
+import json
+from typing import Any, Dict
 
-def validate_crypto_payload(data: dict):
-    """
-    strict sanity check for crypto payloads, using regex wizardry
-    for ticker symbols and decimal conversion for amounts.
-    """
-    schema = {'ticker': r'^[A-Z]{3,5}$', 'amount': r'^[0-9]+(\.[0-9]+)?$'}
+def load_config(path: str = "config.json") -> Dict[str, Any]:
+    defaults = {
+        "rpc_url": "https://bsc-dataseed.binance.org/",
+        "gas_limit": 21000,
+        "retry_attempts": 3,
+        "monitoring_enabled": True
+    }
     
-    for key, pattern in schema.items():
-        if key not in data:
-            raise ValueError(f"Missing mandatory field: {key}")
+    if not os.path.exists(path):
+        return defaults
         
-        if not re.match(pattern, str(data[key])):
-            raise ValueError(f"Malformed data format for {key}: {data[key]}")
-
     try:
-        amount = Decimal(data['amount'])
-        if amount <= 0:
-            raise ValueError("Non-positive crypto amount detected")
-    except InvalidOperation:
-        raise ValueError("Failed to cast amount to financial precision")
+        with open(path, 'r') as f:
+            user_data = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return defaults
 
-    return True
+    # Deep merge approach: dict comprehension logic
+    return {**defaults, **{k: v for k, v in user_data.items() if v is not None}}
 
-def sanitize_input(data: dict):
-    """
-    in-place dict sanitization to strip unwanted whitespace
-    from our inbound raw packets.
-    """
-    for key, value in data.items():
-        if isinstance(value, str):
-            data[key] = value.strip()
-    return data
+def get_val(key: str, default: Any = None) -> Any:
+    config = load_config()
+    return config.get(key, default)
+
+# Dynamic namespace injection for rapid prototyping
+class ConfigProxy:
+    def __init__(self):
+        self._data = load_config()
+    
+    def __getattr__(self, name):
+        if name in self._data:
+            return self._data[name]
+        raise AttributeError(f"Config key {name} not found")
+
+cfg = ConfigProxy()
