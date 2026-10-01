@@ -1,51 +1,30 @@
-import struct
-from typing import Generator, Dict, Union
+import hashlib
+import decimal
+from functools import wraps
 
-class FastCryptoProcessor:
-    """
-    Optimized parser for raw binary transaction streams using memoryview
-    to avoid object allocation overhead during high-throughput ingestion.
-    """
-    # Layout: 20 bytes (to) + 20 bytes (from) + 8 bytes (value uint64) + 4 bytes (nonce uint32)
-    TX_STRUCT_FORMAT = ">20s20sQI"
-    TX_SIZE = struct.calcsize(TX_STRUCT_FORMAT)
+def sanitize_currency(amount: str) -> decimal.Decimal:
+    return decimal.Decimal(amount.replace(',', '')).quantize(decimal.Decimal('0.00000001'))
 
-    def __init__(self, raw_buffer: bytes):
-        self.buffer = memoryview(raw_buffer)
+def hash_tx(data: dict) -> str:
+    payload = ''.join([str(data[k]) for k in sorted(data.keys())])
+    return hashlib.sha256(payload.encode()).hexdigest()
 
-    def fast_parse(self) -> Generator[Dict[str, Union[str, int]], None, None]:
-        """
-        Extracts transaction details efficiently using memoryview slicing.
-        """
-        buffer_len = len(self.buffer)
-        offset = 0
-        tx_size = self.TX_SIZE
-        unpack = struct.unpack_from
+def retry_on_failure(retries: int = 3):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_ex = None
+            for _ in range(retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_ex = e
+            raise last_ex
+        return wrapper
+    return decorator
 
-        while offset + tx_size <= buffer_len:
-            to_addr_bytes, from_addr_bytes, value, nonce = unpack(
-                self.TX_STRUCT_FORMAT, self.buffer, offset
-            )
-            yield {
-                "to": f"0x{to_addr_bytes.hex()}",
-                "from": f"0x{from_addr_bytes.hex()}",
-                "value_gwei": value,
-                "nonce": nonce
-            }
-            offset += tx_size
+def pack_payload(address: str, amount: decimal.Decimal, nonce: int) -> bytes:
+    return f'{address}:{amount:f}:{nonce}'.encode('utf-8')
 
-    @classmethod
-    def aggregate_volume(cls, raw_buffer: bytes) -> int:
-        """
-        Ultra-fast volume extraction bypassing dict creation entirely.
-        """
-        view = memoryview(raw_buffer)
-        total_volume = 0
-        tx_size = cls.TX_SIZE
-        value_offset = 40
-        
-        for offset in range(0, len(view) - tx_size + 1, tx_size):
-            val_bytes = view[offset + value_offset : offset + value_offset + 8]
-            total_volume += int.from_bytes(val_bytes, byteorder="big")
-            
-        return total_volume
+def calculate_fee(amount: decimal.Decimal, rate: float = 0.0001) -> decimal.Decimal:
+    return (amount * decimal.Decimal(str(rate))).quantize(decimal.Decimal('0.00000001'))
