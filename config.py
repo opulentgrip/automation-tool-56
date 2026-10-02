@@ -1,33 +1,31 @@
-import json
 import os
-from typing import Any, Dict
+from typing import Dict, Any
+from dataclasses import dataclass
 
-class ConfigLoader:
-    def __init__(self, defaults: Dict[str, Any], path: str = 'config.json'):
-        self.path = path
-        self.data = defaults
-        self._load_and_merge()
+@dataclass(frozen=True)
+class NetworkSettings:
+    rpc_url: str
+    chain_id: int
+    gas_limit: int = 200000
 
-    def _load_and_merge(self) -> None:
-        if not os.path.exists(self.path):
-            return
-        try:
-            with open(self.path, 'r') as f:
-                loaded = json.load(f)
-                self.data.update({k: v for k, v in loaded.items() if k in self.data})
-        except (json.JSONDecodeError, IOError):
-            pass
+def load_crypto_env() -> Dict[str, Any]:
+    return {
+        "nodes": {
+            "eth": NetworkSettings(os.getenv("RPC_ETH", "https://mainnet.infura.io"), 1),
+            "bsc": NetworkSettings(os.getenv("RPC_BSC", "https://bsc-dataseed.binance.org"), 56)
+        },
+        "retry_strategy": {"attempts": 3, "delay": 1.5},
+        "fee_multiplier": float(os.getenv("FEE_MUL", 1.2))
+    }
 
-    def __getattr__(self, name: str) -> Any:
-        if name in self.data:
-            return self.data[name]
-        raise AttributeError(f'crypto node config missing: {name}')
+class ConfigManager:
+    _storage = load_crypto_env()
 
-def get_config() -> ConfigLoader:
-    return ConfigLoader({
-        'api_key': None,
-        'rpc_node': 'wss://mainnet.infura.io/v3/',
-        'retry_attempts': 3,
-        'timeout_sec': 30,
-        'wallet_addresses': []
-    })
+    @classmethod
+    def get(cls, key: str, default: Any = None) -> Any:
+        return cls._storage.get(key, default)
+
+    @classmethod
+    def node_uri(cls, chain: str) -> str:
+        net = cls._storage.get("nodes").get(chain)
+        return net.rpc_url if net else ""
