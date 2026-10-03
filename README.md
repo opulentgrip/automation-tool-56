@@ -1,48 +1,59 @@
 # automation-tool-56
 
-A high-performance Python-based automation engine designed for decentralized exchange interaction and portfolio rebalancing. This tool enables systematic liquidity management and trade execution across multiple EVM-compatible networks with minimal latency.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+`automation-tool-56` is a high-frequency portfolio rebalancing assistant designed for automated token swaps on EVM-compatible decentralized exchanges. It monitors gas prices and liquidity pools in real-time to execute slippage-optimized transactions without manual intervention.
 
 ## Features
 
-*   **Multi-Chain Execution:** Native support for Ethereum, Arbitrum, and BSC using asynchronous RPC calls for parallel transaction processing.
-*   **Intelligent Rebalancing:** Automated portfolio drift detection with configurable slippage thresholds and gas fee optimization.
-*   **Flash Loan Readiness:** Integrated helper modules for interacting with Aave and Uniswap V3 liquidity pools.
-*   **Security-First Design:** Encrypted local keystore management and automatic circuit breakers to halt operations during abnormal market volatility.
+*   **Multi-DEX Routing:** Automatically routes swaps across Uniswap V3 and SushiSwap to guarantee the lowest slippage.
+*   **Gas-Optimized Execution:** Tracks mempool congestion to trigger transactions during low-fee windows.
+*   **Threshold-Based Rebalancing:** Executes instant target allocation adjustments when asset drift exceeds user-defined limits.
+*   **Secure Key Management:** Integrates directly with local hardware wallets or encrypted environment variables.
 
 ## Installation
 
-Ensure you have Python 3.10+ installed.
+Clone the repository and install the required dependencies:
 
 ```bash
-# Clone the repository
 git clone https://github.com/Developer/automation-tool-56.git
 cd automation-tool-56
-
-# Create virtual environment and install dependencies
-python -m venv venv
-source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Basic Usage
+*Note: Requires Python 3.9+ and an active Web3 provider endpoint.*
 
-Configure your environment variables in `.env` with your private keys and RPC endpoints, then initiate the automation runner:
+## Quick Start
+
+1. Create a `.env` file in the root directory:
+   ```env
+   RPC_URL="https://mainnet.infura.io/v3/your_project_id"
+   PRIVATE_KEY="0xyour_wallet_private_key"
+   ```
+
+2. Run the automated rebalancer using the Python API:
 
 ```python
-from automation import Runner
+import os
+from automation_tool_56 import Rebalancer
 
-# Initialize the engine
-engine = Runner(network='arbitrum', strategy='market_maker')
+# Initialize the bot using your Web3 RPC configuration
+bot = Rebalancer(
+    rpc_url=os.environ.get("RPC_URL"),
+    private_key=os.environ.get("PRIVATE_KEY")
+)
 
-# Start the monitoring loop
-engine.start(interval=60)
+# Rebalance portfolio to 60% ETH and 40% USDC with a 2% drift tolerance
+bot.set_target_allocation(
+    token_a="ETH", 
+    token_b="USDC", 
+    target_ratio=0.60, 
+    tolerance=0.02
+)
+
+bot.start_monitoring(interval_seconds=60)
 ```
-
-## Safety Warning
-Always test your configurations on a testnet (e.g., Sepolia or Arbitrum Goerli) before deploying with production capital. The author is not responsible for any financial losses resulting from misconfigured parameters.
 
 ## License
 
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-
-Distributed under the MIT License. See `LICENSE` for more information.
+This project is licensed under the MIT License - see the LICENSE file for details.
