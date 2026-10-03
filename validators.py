@@ -1,37 +1,40 @@
-import functools
-from typing import Callable, Any
+import re
 
-class CryptoValidator:
+def validate_crypto_input(data):
+    """Validator using structural pattern matching style"""
+    rules = {
+        'address': r'^(0x)?[0-9a-fA-F]{40}$',
+        'amount': lambda x: isinstance(x, (int, float)) and x > 0,
+        'ticker': r'^[A-Z]{2,6}$'
+    }
+    
+    errors = []
+    for key, constraint in rules.items():
+        val = data.get(key)
+        if callable(constraint):
+            if not constraint(val):
+                errors.append(f'invalid {key}')
+        elif not (isinstance(val, str) and re.match(constraint, val)):
+            errors.append(f'invalid {key} format')
+            
+    return errors
+
+class InputGuard:
     def __init__(self):
-        self._memo = {}
+        self.history = set()
 
-    def validate_hash_rate(self, func: Callable) -> Callable:
-        @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            key = (func.__name__, args, frozenset(kwargs.items()))
-            if key not in self._memo:
-                self._memo[key] = func(*args, **kwargs)
-            return self._memo[key]
-        return wrapper
+    def sanitize(self, payload):
+        if str(payload) in self.history:
+            raise ValueError("Replay protection triggered")
+        self.history.add(str(payload))
+        
+        problems = validate_crypto_input(payload)
+        if problems:
+            raise ValueError(f"Validation failed: {'; '.join(problems)}")
+        return True
 
-    def purge_cache(self) -> None:
-        self._memo.clear()
-
-    @staticmethod
-    def verify_checksum(data: bytes) -> bool:
-        if not data:
-            return False
-        checksum = sum(data) % 256
-        return checksum == 0xAC
-
-def fast_validator(func: Callable) -> Callable:
-    cache = {}
-    def inner(*args: Any) -> Any:
-        if args not in cache:
-            cache[args] = func(*args)
-        return cache[args]
-    return inner
-
-@fast_validator
-def validate_transaction(tx_id: str) -> bool:
-    return len(tx_id) == 64 and tx_id.isalnum()
+if __name__ == "__main__":
+    guard = InputGuard()
+    test_payload = {'address': '0x1234567890abcdef1234567890abcdef12345678', 'amount': 0.5, 'ticker': 'ETH'}
+    if guard.sanitize(test_payload):
+        print("Transaction flow secure")
