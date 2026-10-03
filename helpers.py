@@ -1,39 +1,65 @@
-import os
-import json
-from typing import Any, Dict
+import random
+import time
+from functools import wraps
+from typing import Any, Callable, Sequence, Type
 
-def load_config(path: str = "config.json") -> Dict[str, Any]:
-    defaults = {
-        "rpc_url": "https://bsc-dataseed.binance.org/",
-        "gas_limit": 21000,
-        "retry_attempts": 3,
-        "monitoring_enabled": True
-    }
-    
-    if not os.path.exists(path):
-        return defaults
-        
-    try:
-        with open(path, 'r') as f:
-            user_data = json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return defaults
 
-    # Deep merge approach: dict comprehension logic
-    return {**defaults, **{k: v for k, v in user_data.items() if v is not None}}
+class CryptoNetworkError(Exception):
+    """Base network error for crypto RPC and exchange calls."""
 
-def get_val(key: str, default: Any = None) -> Any:
-    config = load_config()
-    return config.get(key, default)
+    pass
 
-# Dynamic namespace injection for rapid prototyping
-class ConfigProxy:
-    def __init__(self):
-        self._data = load_config()
-    
-    def __getattr__(self, name):
-        if name in self._data:
-            return self._data[name]
-        raise AttributeError(f"Config key {name} not found")
 
-cfg = ConfigProxy()
+class RateLimitExceeded(CryptoNetworkError):
+    """Triggered when exchange or node HTTP 429 occurs."""
+
+    pass
+
+
+class NodeUnresponsive(CryptoNetworkError):
+    """Triggered on socket timeouts or gateway errors."""
+
+    pass
+
+
+def _fibonacci_jitter_stream(initial: float = 0.5, cap: float = 30.0):
+    a, b = initial, initial
+    while True:
+        jitter = random.uniform(0.8, 1.3)
+        yield min(cap, a * jitter)
+        a, b = b, a + b
+
+
+def dynamic_rpc_retry(
+    retries: int = 5,
+    catch_exceptions: Sequence[Type[BaseException]] = (
+        CryptoNetworkError,
+        ConnectionError,
+        TimeoutError,
+    ),
+):
+    """Decorator driving dynamic retry behavior via generator-based Fibonacci jitter stream."""
+
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            delays = _fibonacci_jitter_stream()
+            attempt = 0
+
+            while True:
+                try:
+                    return func(*args, **kwargs)
+                except catch_exceptions as exc:
+                    attempt += 1
+                    if attempt > retries:
+                        raise exc
+
+                    delay = next(delays)
+                    if isinstance(exc, RateLimitExceeded):
+                        delay *= 2.0
+
+                    time.sleep(delay)
+
+        return wrapper
+
+    return decorator
