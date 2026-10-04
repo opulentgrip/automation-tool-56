@@ -1,59 +1,65 @@
 import os
 import json
+from pathlib import Path
 from typing import Any, Dict
 
-DEFAULTS: Dict[str, Any] = {
-    "RPC_URL": "https://cloudflare-eth.com",
-    "GAS_MULTIPLIER": 1.15,
-    "SLIPPAGE_BPS": 50,
-    "POLLING_INTERVAL_SEC": 12,
-    "DEBUG_MODE": False,
-    "ENCRYPTED_KEY_PATH": "key.enc"
+DEFAULT_CRYPTO_CONFIG: Dict[str, Any] = {
+    "network": {
+        "chain_id": 1,
+        "rpc_url": "https://eth.llamarpc.com",
+        "timeout_seconds": 15,
+    },
+    "trading": {
+        "max_slippage_pct": 0.5,
+        "gas_price_gwei": 30.0,
+        "auto_hedge": False,
+    },
+    "security": {
+        "verify_contracts": True,
+        "min_confirmations": 2,
+    }
 }
 
-class CryptoConfig:
-    """A metamorphic config loader that dynamically resolves from environment variables,
-    an optional JSON file, and hardcoded crypto defaults."""
-    
-    def __init__(self, filepath: str = "config.json"):
-        self._filepath = filepath
-        self._file_config = self._load_from_file()
+class ConfigLoader:
+    """Dynamic configuration loader with environment overrides and dict blending."""
 
-    def _load_from_file(self) -> Dict[str, Any]:
-        if os.path.exists(self._filepath):
-            try:
-                with open(self._filepath, "r") as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, IOError):
-                pass
-        return {}
+    def __init__(self, config_path: str = "config.json"):
+        self._path = Path(config_path)
+        self._raw_config = self._load_and_merge()
 
-    def get(self, key: str) -> Any:
-        default_val = DEFAULTS.get(key)
-        env_val = os.getenv(key)
-        
-        if env_val is not None:
-            if default_val is not None:
-                try:
-                    if isinstance(default_val, bool):
-                        return env_val.lower() in ("true", "1", "yes")
-                    return type(default_val)(env_val)
-                except ValueError:
-                    return env_val
-            return env_val
+    def _load_and_merge(self) -> Dict[str, Any]:
+        file_cfg = {}
+        if self._path.exists():
+            with open(self._path, "r", encoding="utf-8") as f:
+                file_cfg = json.load(f)
 
-        if key in self._file_config:
-            return self._file_config[key]
+        merged = {}
+        for section, defaults in DEFAULT_CRYPTO_CONFIG.items():
+            user_section = file_cfg.get(section, {})
+            merged[section] = defaults | user_section
 
-        if key in DEFAULTS:
-            return DEFAULTS[key]
-        
-        raise AttributeError(f"Configuration key '{key}' is undefined.")
+            for key, default_val in defaults.items():
+                env_var = f"CRYPTO_{section.upper()}_{key.upper()}"
+                if env_var in os.environ:
+                    val = os.environ[env_var]
+                    target_type = type(default_val)
+                    if target_type == bool:
+                        merged[section][key] = val.lower() in ("true", "1", "yes")
+                    else:
+                        merged[section][key] = target_type(val)
+
+        return merged
 
     def __getattr__(self, name: str) -> Any:
-        try:
-            return self.get(name)
-        except AttributeError as e:
-            raise AttributeError(e) from None
+        if name in self._raw_config:
+            val = self._raw_config[name]
+            if isinstance(val, dict):
+                return type("ConfigSection", (), {
+                    "get": val.get,
+                    **{k: v for k, v in val.items()}
+                })()
+            return val
+        raise AttributeError(f"Configuration section '{name}' not found")
 
-config = CryptoConfig()
+    def get(self, section: str, key: str, fallback: Any = None) -> Any:
+        return self._raw_config.get(section, {}).get(key, fallback)
