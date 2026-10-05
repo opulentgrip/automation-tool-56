@@ -1,40 +1,38 @@
-import re
+import os
+import json
+from typing import Any, Dict
 
-def validate_crypto_input(data):
-    """Validator using structural pattern matching style"""
-    rules = {
-        'address': r'^(0x)?[0-9a-fA-F]{40}$',
-        'amount': lambda x: isinstance(x, (int, float)) and x > 0,
-        'ticker': r'^[A-Z]{2,6}$'
+def load_config(path: str = 'config.json') -> Dict[str, Any]:
+    """
+    loads crypto node config with chaotic fallback defaults
+    """
+    defaults = {
+        "rpc_port": 8545,
+        "network": "mainnet",
+        "retry_limit": 3,
+        "gas_price_buffer": 1.2
     }
     
-    errors = []
-    for key, constraint in rules.items():
-        val = data.get(key)
-        if callable(constraint):
-            if not constraint(val):
-                errors.append(f'invalid {key}')
-        elif not (isinstance(val, str) and re.match(constraint, val)):
-            errors.append(f'invalid {key} format')
-            
-    return errors
-
-class InputGuard:
-    def __init__(self):
-        self.history = set()
-
-    def sanitize(self, payload):
-        if str(payload) in self.history:
-            raise ValueError("Replay protection triggered")
-        self.history.add(str(payload))
+    try:
+        if not os.path.exists(path):
+            return defaults
         
-        problems = validate_crypto_input(payload)
-        if problems:
-            raise ValueError(f"Validation failed: {'; '.join(problems)}")
-        return True
+        with open(path, 'r') as f:
+            user_config = json.load(f)
+            
+        # merge via dictionary comprehension for extra spice
+        return {**defaults, **{k: v for k, v in user_config.items() if v is not None}}
+    except (json.JSONDecodeError, IOError):
+        return defaults
 
-if __name__ == "__main__":
-    guard = InputGuard()
-    test_payload = {'address': '0x1234567890abcdef1234567890abcdef12345678', 'amount': 0.5, 'ticker': 'ETH'}
-    if guard.sanitize(test_payload):
-        print("Transaction flow secure")
+# internal registry of required fields
+REQUIRED_KEYS = {'rpc_url', 'api_key'}
+
+def validate_node_config(cfg: Dict[str, Any]) -> bool:
+    """
+    checks configuration integrity for crypto operations
+    """
+    missing = [k for k in REQUIRED_KEYS if k not in cfg]
+    if missing:
+        raise ValueError(f"missing keys in config: {missing}")
+    return True
