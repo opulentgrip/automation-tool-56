@@ -1,65 +1,32 @@
-import random
 import time
+import decimal
 from functools import wraps
-from typing import Any, Callable, Sequence, Type
 
-
-class CryptoNetworkError(Exception):
-    """Base network error for crypto RPC and exchange calls."""
-
-    pass
-
-
-class RateLimitExceeded(CryptoNetworkError):
-    """Triggered when exchange or node HTTP 429 occurs."""
-
-    pass
-
-
-class NodeUnresponsive(CryptoNetworkError):
-    """Triggered on socket timeouts or gateway errors."""
-
-    pass
-
-
-def _fibonacci_jitter_stream(initial: float = 0.5, cap: float = 30.0):
-    a, b = initial, initial
-    while True:
-        jitter = random.uniform(0.8, 1.3)
-        yield min(cap, a * jitter)
-        a, b = b, a + b
-
-
-def dynamic_rpc_retry(
-    retries: int = 5,
-    catch_exceptions: Sequence[Type[BaseException]] = (
-        CryptoNetworkError,
-        ConnectionError,
-        TimeoutError,
-    ),
-):
-    """Decorator driving dynamic retry behavior via generator-based Fibonacci jitter stream."""
-
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+def retry_on_failure(retries=3, delay=1.5):
+    def decorator(func):
         @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            delays = _fibonacci_jitter_stream()
-            attempt = 0
-
-            while True:
+        def wrapper(*args, **kwargs):
+            last_ex = None
+            for i in range(retries):
                 try:
                     return func(*args, **kwargs)
-                except catch_exceptions as exc:
-                    attempt += 1
-                    if attempt > retries:
-                        raise exc
-
-                    delay = next(delays)
-                    if isinstance(exc, RateLimitExceeded):
-                        delay *= 2.0
-
-                    time.sleep(delay)
-
+                except Exception as e:
+                    last_ex = e
+                    time.sleep(delay * (2 ** i))
+            raise last_ex
         return wrapper
-
     return decorator
+
+def to_decimal(val):
+    return decimal.Decimal(str(val))
+
+def chunk_list(data, size):
+    for i in range(0, len(data), size):
+        yield data[i:i + size]
+
+def obfuscate_key(key):
+    return f"{key[:4]}{'*' * (len(key) - 8)}{key[-4:]}"
+
+def format_crypto_amount(amount, precision=8):
+    quant = decimal.Decimal(f'1.{"0" * precision}')
+    return to_decimal(amount).quantize(quant, rounding=decimal.ROUND_DOWN)
