@@ -1,8 +1,11 @@
 import time
 import functools
 import random
+import logging
 
-def exponential_backoff(max_retries=5, base_delay=0.5, jitter=True):
+logger = logging.getLogger(__name__)
+
+def resilient_request(max_retries=3, base_delay=1.0, backoff=2.0):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -10,21 +13,22 @@ def exponential_backoff(max_retries=5, base_delay=0.5, jitter=True):
             while attempts < max_retries:
                 try:
                     return func(*args, **kwargs)
-                except Exception as e:
+                except (ConnectionError, TimeoutError, OSError) as e:
                     attempts += 1
                     if attempts >= max_retries:
+                        logger.error(f'operation exhausted after {attempts} attempts')
                         raise e
-                    delay = base_delay * (2 ** (attempts - 1))
-                    if jitter:
-                        delay *= (0.5 + random.random())
-                    time.sleep(delay)
+                    
+                    sleep_time = (base_delay * (backoff ** (attempts - 1))) + (random.random() * 0.5)
+                    logger.warning(f'retry {attempts}/{max_retries} after {sleep_time:.2f}s due to {e}')
+                    time.sleep(sleep_time)
+            return None
         return wrapper
     return decorator
 
-def retry_request(func):
-    """Crypto-specific network retry wrapper with exponential backoff."""
-    @functools.wraps(func)
-    def sync_wrapper(*args, **kwargs):
-        strategy = exponential_backoff(max_retries=3, base_delay=0.2)
-        return strategy(func)(*args, **kwargs)
-    return sync_wrapper
+@resilient_request(max_retries=5, base_delay=0.5)
+def fetch_price_data(endpoint):
+    # Simulate crypto exchange network fluctuations
+    if random.random() < 0.7:
+        raise ConnectionError('exchange socket heartbeat failed')
+    return {'symbol': 'BTC', 'price': 65000.0}
