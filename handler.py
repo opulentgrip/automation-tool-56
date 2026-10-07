@@ -1,36 +1,29 @@
-import time
-import random
 import functools
-from typing import Callable, Any
+import collections
 
-def exponential_jitter_retry(max_attempts: int = 5, base_delay: float = 1.0):
-    def decorator(func: Callable):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> Any:
-            last_ex = None
-            for attempt in range(max_attempts):
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    last_ex = e
-                    if attempt == max_attempts - 1:
-                        break
-                    sleep_time = (base_delay * (2 ** attempt)) + (random.random() * 0.1)
-                    time.sleep(sleep_time)
-            raise last_ex
-        return wrapper
-    return decorator
+class CryptoOptimizer:
+    def __init__(self, cache_size=1024):
+        self.cache_size = cache_size
+        self.price_history = collections.deque(maxlen=cache_size)
 
-@exponential_jitter_retry(max_attempts=3)
-def fetch_crypto_price(ticker: str) -> float:
-    # Simulate volatile network state
-    if random.random() < 0.7:
-        raise ConnectionError(f"Node sync failure for {ticker}")
-    return random.uniform(1000.0, 60000.0)
+    @functools.lru_cache(maxsize=128)
+    def compute_volatility(self, ticker: str, window: int) -> float:
+        if len(self.price_history) < window:
+            return 0.0
+        subset = list(self.price_history)[-window:]
+        mean = sum(subset) / window
+        variance = sum((x - mean) ** 2 for x in subset) / window
+        return variance ** 0.5
 
-if __name__ == "__main__":
-    try:
-        price = fetch_crypto_price("BTC")
-        print(f"Market price recovered: {price}")
-    except Exception as e:
-        print(f"Operation failed after retries: {e}")
+    def ingest_price(self, price: float):
+        self.price_history.append(price)
+        if len(self.price_history) % 10 == 0:
+            self.compute_volatility.cache_clear()
+
+def process_stream(data: list):
+    opt = CryptoOptimizer()
+    results = []
+    for p in data:
+        opt.ingest_price(p)
+        results.append(opt.compute_volatility('BTC', 5))
+    return results
