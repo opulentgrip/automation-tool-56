@@ -1,54 +1,35 @@
-import hashlib
-from dataclasses import dataclass, field
-from typing import Callable, Generator
+import time
+import random
+import functools
+from typing import Callable, Any
 
-@dataclass
-class CryptoPayload:
-    tx_hash: str
-    raw_hex: str
-    metadata: dict = field(default_factory=dict)
-    stage_history: list = field(default_factory=list)
+def retry_on_failure(max_attempts: int = 3, base_delay: float = 1.0):
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            attempts = 0
+            while attempts < max_attempts:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    attempts += 1
+                    if attempts == max_attempts:
+                        raise e
+                    sleep_time = (base_delay * (2 ** (attempts - 1))) + (random.random() * 0.1)
+                    time.sleep(sleep_time)
+        return wrapper
+    return decorator
 
-class ProcessingPipeline:
-    """Unconventional decorator-driven processing pipeline for crypto payloads."""
-    def __init__(self):
-        self._stages: list[tuple[str, Callable[[CryptoPayload], CryptoPayload]]] = []
+@retry_on_failure(max_attempts=5, base_delay=0.5)
+def fetch_crypto_price(ticker: str) -> float:
+    # Simulate volatile network state in crypto environment
+    if random.random() < 0.7:
+        raise ConnectionError("node synchronization lag")
+    return round(random.uniform(20000, 60000), 2)
 
-    def stage(self, name: str):
-        def decorator(func: Callable[[CryptoPayload], CryptoPayload]):
-            self._stages.append((name, func))
-            return func
-        return decorator
-
-    def __call__(self, initial_payload: CryptoPayload) -> CryptoPayload:
-        current = initial_payload
-        for name, func in self._stages:
-            current = func(current)
-            current.stage_history.append(name)
-        return current
-
-pipeline = ProcessingPipeline()
-
-@pipeline.stage("hash_validation")
-def validate_hash(payload: CryptoPayload) -> CryptoPayload:
-    computed = hashlib.sha256(payload.raw_hex.encode()).hexdigest()
-    payload.metadata["digest_match"] = (computed == payload.tx_hash)
-    return payload
-
-@pipeline.stage("gas_fee_projection")
-def estimate_gas(payload: CryptoPayload) -> CryptoPayload:
-    payload_len = len(payload.raw_hex)
-    base_fee = 21000
-    payload.metadata["estimated_gas"] = base_fee + (payload_len * 16)
-    return payload
-
-@pipeline.stage("mempool_tagging")
-def tag_mempool(payload: CryptoPayload) -> CryptoPayload:
-    is_priority = payload.metadata.get("estimated_gas", 0) > 25000
-    payload.metadata["priority_flag"] = is_priority
-    return payload
-
-def process_transaction_batch(raw_transactions: list[dict]) -> Generator[CryptoPayload, None, None]:
-    for tx in raw_transactions:
-        payload = CryptoPayload(tx_hash=tx["hash"], raw_hex=tx["hex"])
-        yield pipeline(payload)
+if __name__ == "__main__":
+    try:
+        price = fetch_crypto_price("BTC")
+        print(f"current price: {price}")
+    except Exception as err:
+        print(f"terminal failure: {err}")
