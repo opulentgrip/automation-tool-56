@@ -1,34 +1,38 @@
 import time
 import functools
-import random
 import logging
+from typing import Callable, Any
 
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('automation-tool-56')
 
-def resilient_request(max_retries=3, base_delay=1.0, backoff=2.0):
-    def decorator(func):
+class CryptoCircuitBreaker:
+    def __init__(self, retries: int = 3, delay: float = 1.5):
+        self.retries = retries
+        self.delay = delay
+
+    def __call__(self, func: Callable) -> Callable:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            attempts = 0
-            while attempts < max_retries:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            last_ex = None
+            for attempt in range(self.retries):
                 try:
                     return func(*args, **kwargs)
-                except (ConnectionError, TimeoutError, OSError) as e:
-                    attempts += 1
-                    if attempts >= max_retries:
-                        logger.error(f'operation exhausted after {attempts} attempts')
-                        raise e
-                    
-                    sleep_time = (base_delay * (backoff ** (attempts - 1))) + (random.random() * 0.5)
-                    logger.warning(f'retry {attempts}/{max_retries} after {sleep_time:.2f}s due to {e}')
-                    time.sleep(sleep_time)
-            return None
+                except Exception as e:
+                    last_ex = e
+                    logger.warning(f'attempt {attempt + 1} failed: {e}')
+                    time.sleep(self.delay * (attempt + 1))
+            raise last_ex
         return wrapper
-    return decorator
 
-@resilient_request(max_retries=5, base_delay=0.5)
-def fetch_price_data(endpoint):
-    # Simulate crypto exchange network fluctuations
-    if random.random() < 0.7:
-        raise ConnectionError('exchange socket heartbeat failed')
-    return {'symbol': 'BTC', 'price': 65000.0}
+def sanitize_ticker(symbol: str) -> str:
+    return symbol.upper().replace('/', '_').strip()
+
+def format_crypto_amount(val: float, precision: int = 8) -> str:
+    return f'{val:.{precision}f}'.rstrip('0').rstrip('.')
+
+def get_timestamp() -> int:
+    return int(time.time() * 1000)
+
+def retry_on_failure(retries: int = 3) -> CryptoCircuitBreaker:
+    return CryptoCircuitBreaker(retries=retries)
