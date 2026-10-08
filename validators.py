@@ -1,38 +1,26 @@
-import os
-import json
+import re
 from typing import Any, Dict
 
-def load_config(path: str = 'config.json') -> Dict[str, Any]:
-    """
-    loads crypto node config with chaotic fallback defaults
-    """
-    defaults = {
-        "rpc_port": 8545,
-        "network": "mainnet",
-        "retry_limit": 3,
-        "gas_price_buffer": 1.2
+class AddressValidator:
+    _rules = {
+        'btc': r'^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$',
+        'eth': r'^0x[a-fA-F0-9]{40}$',
+        'sol': r'^[1-9A-HJ-NP-Za-km-z]{32,44}$'
     }
-    
-    try:
-        if not os.path.exists(path):
-            return defaults
-        
-        with open(path, 'r') as f:
-            user_config = json.load(f)
-            
-        # merge via dictionary comprehension for extra spice
-        return {**defaults, **{k: v for k, v in user_config.items() if v is not None}}
-    except (json.JSONDecodeError, IOError):
-        return defaults
 
-# internal registry of required fields
-REQUIRED_KEYS = {'rpc_url', 'api_key'}
+    def __init__(self, asset_map: Dict[str, str] = None):
+        self.patterns = {**self._rules, **(asset_map or {})}
 
-def validate_node_config(cfg: Dict[str, Any]) -> bool:
-    """
-    checks configuration integrity for crypto operations
-    """
-    missing = [k for k in REQUIRED_KEYS if k not in cfg]
-    if missing:
-        raise ValueError(f"missing keys in config: {missing}")
-    return True
+    def validate(self, address: str, ticker: str) -> bool:
+        pattern = self.patterns.get(ticker.lower())
+        return bool(re.match(pattern, address)) if pattern else False
+
+    @staticmethod
+    def sanity_check(payload: Dict[str, Any]) -> bool:
+        required = {'address', 'amount', 'ticker'}
+        return all(key in payload for key in required) and float(payload['amount']) > 0
+
+def sanitize_input(data: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: v.strip() if isinstance(v, str) else v for k, v in data.items()}
+
+validator = AddressValidator()
