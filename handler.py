@@ -2,36 +2,41 @@ import time
 import random
 from typing import Any, Callable
 
-class CryptoError(Exception):
-    pass
+class CryptoCircuitBreaker:
+    def __init__(self, limit: int = 3):
+        self.failures = 0
+        self.limit = limit
+        self.banned = False
 
-class ResilienceHandler:
-    def __init__(self, max_retries: int = 3):
-        self.max_retries = max_retries
-        self.backoff_factor = 0.5
-
-    def execute(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
-        attempts = 0
-        while attempts < self.max_retries:
+    def __call__(self, func: Callable) -> Callable:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            if self.banned:
+                raise ConnectionError("Circuit breaker trip: cooldown required")
             try:
-                return func(*args, **kwargs)
+                result = func(*args, **kwargs)
+                self.failures = max(0, self.failures - 1)
+                return result
             except (ConnectionError, TimeoutError) as e:
-                attempts += 1
-                if attempts >= self.max_retries:
-                    raise CryptoError(f"Final failure after {attempts} attempts: {e}")
-                sleep_time = (self.backoff_factor * (2 ** attempts)) + (random.random() * 0.1)
-                time.sleep(sleep_time)
-            except Exception as e:
-                raise CryptoError(f"Fatal non-recoverable error encountered: {type(e).__name__}") from e
+                self.failures += 1
+                if self.failures >= self.limit:
+                    self.banned = True
+                    time.sleep(2 ** self.failures)
+                    self.banned = False
+                    self.failures = 0
+                raise e
+        return wrapper
 
-def validate_wallet_address(address: str) -> bool:
-    if not isinstance(address, str) or len(address) < 26:
-        raise ValueError("Invalid blockchain address format")
-    return True
+@CryptoCircuitBreaker(limit=2)
+def execute_trade(pair: str, amount: float):
+    dice = random.random()
+    if dice < 0.3:
+        raise ConnectionError(f"Node sync latency for {pair}")
+    if dice < 0.5:
+        raise TimeoutError("Exchange orderbook timed out")
+    return f"Successfully bought {amount} of {pair}"
 
-# Usage example for the engine
-if __name__ == '__main__':
-    handler = ResilienceHandler()
-    safe_task = lambda: "0xSuccess" if random.random() > 0.2 else exec("raise(ConnectionError('RPC Fail'))")
-    result = handler.execute(safe_task)
-    print(f"Operation output: {result}")
+def safe_process(pair: str, amount: float):
+    try:
+        return execute_trade(pair, amount)
+    except (ConnectionError, TimeoutError) as e:
+        return {"status": "error", "message": str(e), "code": 503}
