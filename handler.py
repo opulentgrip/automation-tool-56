@@ -1,29 +1,37 @@
-import functools
-import collections
+import time
+import random
+from typing import Any, Callable
 
-class CryptoOptimizer:
-    def __init__(self, cache_size=1024):
-        self.cache_size = cache_size
-        self.price_history = collections.deque(maxlen=cache_size)
+class CryptoError(Exception):
+    pass
 
-    @functools.lru_cache(maxsize=128)
-    def compute_volatility(self, ticker: str, window: int) -> float:
-        if len(self.price_history) < window:
-            return 0.0
-        subset = list(self.price_history)[-window:]
-        mean = sum(subset) / window
-        variance = sum((x - mean) ** 2 for x in subset) / window
-        return variance ** 0.5
+class ResilienceHandler:
+    def __init__(self, max_retries: int = 3):
+        self.max_retries = max_retries
+        self.backoff_factor = 0.5
 
-    def ingest_price(self, price: float):
-        self.price_history.append(price)
-        if len(self.price_history) % 10 == 0:
-            self.compute_volatility.cache_clear()
+    def execute(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
+        attempts = 0
+        while attempts < self.max_retries:
+            try:
+                return func(*args, **kwargs)
+            except (ConnectionError, TimeoutError) as e:
+                attempts += 1
+                if attempts >= self.max_retries:
+                    raise CryptoError(f"Final failure after {attempts} attempts: {e}")
+                sleep_time = (self.backoff_factor * (2 ** attempts)) + (random.random() * 0.1)
+                time.sleep(sleep_time)
+            except Exception as e:
+                raise CryptoError(f"Fatal non-recoverable error encountered: {type(e).__name__}") from e
 
-def process_stream(data: list):
-    opt = CryptoOptimizer()
-    results = []
-    for p in data:
-        opt.ingest_price(p)
-        results.append(opt.compute_volatility('BTC', 5))
-    return results
+def validate_wallet_address(address: str) -> bool:
+    if not isinstance(address, str) or len(address) < 26:
+        raise ValueError("Invalid blockchain address format")
+    return True
+
+# Usage example for the engine
+if __name__ == '__main__':
+    handler = ResilienceHandler()
+    safe_task = lambda: "0xSuccess" if random.random() > 0.2 else exec("raise(ConnectionError('RPC Fail'))")
+    result = handler.execute(safe_task)
+    print(f"Operation output: {result}")
