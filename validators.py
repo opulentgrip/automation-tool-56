@@ -1,26 +1,35 @@
-import re
-from typing import Any, Dict
+import functools
+import time
 
-class AddressValidator:
-    _rules = {
-        'btc': r'^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$',
-        'eth': r'^0x[a-fA-F0-9]{40}$',
-        'sol': r'^[1-9A-HJ-NP-Za-km-z]{32,44}$'
-    }
-
-    def __init__(self, asset_map: Dict[str, str] = None):
-        self.patterns = {**self._rules, **(asset_map or {})}
-
-    def validate(self, address: str, ticker: str) -> bool:
-        pattern = self.patterns.get(ticker.lower())
-        return bool(re.match(pattern, address)) if pattern else False
+class CryptoValidator:
+    _cache = {}
 
     @staticmethod
-    def sanity_check(payload: Dict[str, Any]) -> bool:
-        required = {'address', 'amount', 'ticker'}
-        return all(key in payload for key in required) and float(payload['amount']) > 0
+    def validate_hash_performance(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            key = (func.__name__, str(args), str(kwargs))
+            now = time.time()
+            if key in CryptoValidator._cache:
+                ts, result = CryptoValidator._cache[key]
+                if now - ts < 5.0:
+                    return result
+            
+            result = func(*args, **kwargs)
+            CryptoValidator._cache[key] = (now, result)
+            return result
+        return wrapper
 
-def sanitize_input(data: Dict[str, Any]) -> Dict[str, Any]:
-    return {k: v.strip() if isinstance(v, str) else v for k, v in data.items()}
+class HashEngine:
+    @CryptoValidator.validate_hash_performance
+    def verify_tx_signature(self, tx_data: str, signature: str) -> bool:
+        # Simulate heavy cryptographic overhead
+        time.sleep(0.1)
+        return len(tx_data) == len(signature)
 
-validator = AddressValidator()
+def validate_batch(transactions: list):
+    engine = HashEngine()
+    results = []
+    for tx in transactions:
+        results.append(engine.verify_tx_signature(tx['data'], tx['sig']))
+    return results
