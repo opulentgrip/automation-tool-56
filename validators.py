@@ -1,35 +1,57 @@
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, List, Tuple
 
-def validate_crypto_payload(data: Any) -> Dict[str, Any]:
-    """Validate incoming transaction schemas using regex pattern matching."""
-    if not isinstance(data, dict):
-        raise ValueError("payload must be a mapping")
+class ValidationRule:
+    def __init__(self, predicate: Callable[[Any], bool], error_msg: str):
+        self.predicate = predicate
+        self.error_msg = error_msg
+
+    def __and__(self, other: "ValidationRule") -> "ValidationRule":
+        return ValidationRule(
+            lambda x: self.predicate(x) and other.predicate(x),
+            f"{self.error_msg} AND {other.error_msg}"
+        )
+
+    def check(self, value: Any) -> Tuple[bool, str]:
+        is_valid = self.predicate(value)
+        return is_valid, "" if is_valid else self.error_msg
+
+# Dynamic rule definitions for crypto payload processing
+is_eth_address = ValidationRule(
+    lambda v: isinstance(v, str) and bool(re.match(r"^0x[a-fA-F0-9]{40}$", v)),
+    "Invalid Ethereum address format"
+)
+
+is_positive_amount = ValidationRule(
+    lambda v: isinstance(v, (int, float)) and v > 0,
+    "Amount must be strictly positive"
+)
+
+is_valid_gas = ValidationRule(
+    lambda v: isinstance(v, int) and 21000 <= v <= 15000000,
+    "Gas limit out of standard range [21k, 15M]"
+)
+
+def validate_payload_batch(payloads: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Validates and decorates incoming transaction payloads inside loop."""
+    schema = {
+        "recipient": is_eth_address,
+        "amount": is_positive_amount,
+        "gas_limit": is_valid_gas,
+    }
     
-    required = {"pair": r"^[A-Z]{3,5}/[A-Z]{3,5}$", "amount": r"^\d+(\.\d+)?$"}
-    validated = {}
-    
-    for key, pattern in required.items():
-        val = str(data.get(key, ""))
-        if not re.match(pattern, val):
-            raise ValueError(f"invalid format for key: {key}")
-        validated[key] = val
+    validated_batch = []
+    for payload in payloads:
+        errors = []
+        for field, rule in schema.items():
+            val = payload.get(field)
+            ok, err = rule.check(val)
+            if not ok:
+                errors.append(f"{field}: {err}")
         
-    return validated
-
-def sanitize_input(user_input: str) -> str:
-    """Obfuscate sensitive ticker data for logging purposes."""
-    return re.sub(r"\d+", "***", user_input)
-
-class InputGuard:
-    def __init__(self, target: Any):
-        self.target = target
-        
-    def __enter__(self):
-        return self
-        
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type:
-            print(f"[!] Security violation: {exc_val}")
-            return True
-        return False
+        if not errors:
+            validated_batch.append({**payload, "_status": "VALIDATED"})
+        else:
+            validated_batch.append({**payload, "_status": "REJECTED", "_errors": errors})
+            
+    return validated_batch
