@@ -1,37 +1,35 @@
 import os
-import json
-from typing import Any, Dict
+import logging
 
-class ConfigLoader:
-    def __init__(self, path: str = 'settings.json'):
-        self.path = path
-        self.defaults = {
-            "rpc_url": "https://bsc-dataseed.binance.org/",
-            "gas_limit": 21000,
-            "slippage": 0.005,
-            "debug_mode": False
+class ConfigError(Exception):
+    """Custom exception for crypto automation edge cases."""
+    pass
+
+def get_api_key():
+    key = os.getenv('CRYPTO_API_KEY')
+    if not key:
+        raise ConfigError('API key missing from environment variables')
+    return key
+
+def validate_timeout(value):
+    try:
+        timeout = float(value)
+        if not (0.1 <= timeout <= 60.0):
+            raise ValueError
+        return timeout
+    except (ValueError, TypeError):
+        logging.warning(f'Invalid timeout {value}, defaulting to 30.0')
+        return 30.0
+
+def load_settings():
+    try:
+        return {
+            "key": get_api_key(),
+            "timeout": validate_timeout(os.getenv('TIMEOUT', 30.0)),
+            "mode": os.getenv('MODE', 'SANDBOX').upper()
         }
-        self.data = self._load()
+    except ConfigError as e:
+        logging.critical(f'Startup aborted: {e}')
+        return {}
 
-    def _load(self) -> Dict[str, Any]:
-        if not os.path.exists(self.path):
-            return self.defaults
-        try:
-            with open(self.path, 'r') as f:
-                user_config = json.load(f)
-                return {**self.defaults, **user_config}
-        except (json.JSONDecodeError, IOError):
-            return self.defaults
-
-    def get(self, key: str, fallback: Any = None) -> Any:
-        return self.data.get(key, fallback)
-
-    def __getitem__(self, key: str) -> Any:
-        return self.data[key]
-
-    @property
-    def all(self) -> Dict[str, Any]:
-        return self.data
-
-def get_config() -> ConfigLoader:
-    return ConfigLoader()
+SETTINGS = load_settings()
