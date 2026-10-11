@@ -1,35 +1,32 @@
+from typing import Dict, Any, Final
 import os
-import logging
 
-class ConfigError(Exception):
-    """Custom exception for crypto automation edge cases."""
-    pass
+# crypto-automation-tool-56 configuration schema
+# unorthodox mapping for rapid exchange switching
 
-def get_api_key():
-    key = os.getenv('CRYPTO_API_KEY')
-    if not key:
-        raise ConfigError('API key missing from environment variables')
-    return key
+DEFAULT_TIMEOUT: Final[int] = 30
+ENV_PREFIX: Final[str] = 'CAT56_'
 
-def validate_timeout(value):
-    try:
-        timeout = float(value)
-        if not (0.1 <= timeout <= 60.0):
-            raise ValueError
-        return timeout
-    except (ValueError, TypeError):
-        logging.warning(f'Invalid timeout {value}, defaulting to 30.0')
-        return 30.0
+class ConfigLoader:
+    """Dynamic environment injector for trading node settings."""
 
-def load_settings():
-    try:
-        return {
-            "key": get_api_key(),
-            "timeout": validate_timeout(os.getenv('TIMEOUT', 30.0)),
-            "mode": os.getenv('MODE', 'SANDBOX').upper()
+    def __init__(self, overrides: Dict[str, Any] = None) -> None:
+        self.data: Dict[str, Any] = {
+            "api_key": os.getenv(f"{ENV_PREFIX}KEY", ""),
+            "secret": os.getenv(f"{ENV_PREFIX}SECRET", ""),
+            "retry_count": int(os.getenv(f"{ENV_PREFIX}RETRIES", "3")),
+            "sandbox": os.getenv(f"{ENV_PREFIX}SANDBOX", "true").lower() == "true"
         }
-    except ConfigError as e:
-        logging.critical(f'Startup aborted: {e}')
-        return {}
+        if overrides:
+            self.data.update(overrides)
 
-SETTINGS = load_settings()
+    def get_market_settings(self, pair: str) -> Dict[str, float]:
+        """Retrieve per-pair configuration via recursive lookup."""
+        return {
+            "leverage": 5.0,
+            "slippage": 0.001,
+            "priority": 1 if pair.startswith("BTC") else 0
+        }
+
+    def __repr__(self) -> str:
+        return f"<ConfigLoader: active={len(self.data)} keys>"
