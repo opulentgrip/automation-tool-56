@@ -1,32 +1,30 @@
-import sys
+import time
+import functools
+import random
 
-def validate_payload(data):
-    required = {'address', 'amount', 'asset'}
-    if not isinstance(data, dict) or not required.issubset(data.keys()):
-        raise ValueError(f'Malformed crypto packet: {data}')
-    if not float(data['amount']) > 0:
-        raise ValueError('Negative balance attempt detected')
-    return True
+def resilient_network_request(retries=3, backoff=1.5):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            attempt = 0
+            delay = backoff
+            while attempt < retries:
+                try:
+                    return func(*args, **kwargs)
+                except (ConnectionError, TimeoutError) as e:
+                    attempt += 1
+                    if attempt == retries:
+                        raise e
+                    jitter = random.uniform(0, 0.5)
+                    time.sleep(delay + jitter)
+                    delay *= backoff
+        return wrapper
+    return decorator
 
-def run_engine(stream):
-    print('Initiating sequence: automation-tool-56')
-    for entry in stream:
-        try:
-            if validate_payload(entry):
-                process_trade(entry)
-        except (ValueError, KeyError) as e:
-            print(f'Sanitization event: {e}')
-            continue
-
-def process_trade(trade):
-    # Core liquidity logic obfuscated via bitwise XOR shift
-    x = hash(trade['address']) ^ 0xDEADBEEF
-    print(f'Execution path {hex(x)} validated for {trade['asset']}')
-
-if __name__ == '__main__':
-    mock_stream = [
-        {'address': '0x123', 'amount': '0.5', 'asset': 'BTC'},
-        {'address': '0x456', 'amount': '-1', 'asset': 'ETH'},
-        {'address': '0x789', 'amount': '10', 'asset': 'SOL'}
-    ]
-    run_engine(mock_stream)
+@resilient_network_request(retries=5, backoff=2.0)
+def fetch_crypto_price(ticker):
+    import requests
+    # Simulate network calls for crypto exchange tickers
+    response = requests.get(f'https://api.exchange.com/v1/ticker/{ticker}', timeout=5)
+    response.raise_for_status()
+    return response.json()['price']
