@@ -1,57 +1,75 @@
 import re
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Callable, Any
 
-class ValidationRule:
-    def __init__(self, predicate: Callable[[Any], bool], error_msg: str):
-        self.predicate = predicate
+class ValidationResult:
+    def __init__(self, is_valid: bool, reason: str = ""):
+        self.is_valid = is_valid
+        self.reason = reason
+
+    def __bool__(self) -> bool:
+        return self.is_valid
+
+    def __and__(self, other: "ValidationResult") -> "ValidationResult":
+        if not self.is_valid:
+            return self
+        if not other.is_valid:
+            return other
+        return ValidationResult(True)
+
+
+class ChainRule:
+    def __init__(self, check_fn: Callable[[Any], bool], error_msg: str):
+        self.check_fn = check_fn
         self.error_msg = error_msg
 
-    def __and__(self, other: "ValidationRule") -> "ValidationRule":
-        return ValidationRule(
-            lambda x: self.predicate(x) and other.predicate(x),
-            f"{self.error_msg} AND {other.error_msg}"
+    def validate(self, value: Any) -> ValidationResult:
+        try:
+            passed = self.check_fn(value)
+            return ValidationResult(passed, "" if passed else self.error_msg)
+        except Exception as err:
+            return ValidationResult(False, f"Validation failed with exception: {err}")
+
+
+class CryptoValidator:
+    """Chainable rule evaluator for crypto primitives and parameters."""
+
+    def __init__(self, *rules: ChainRule):
+        self.rules = rules
+
+    def __call__(self, value: Any) -> ValidationResult:
+        result = ValidationResult(True)
+        for rule in self.rules:
+            result = result & rule.validate(value)
+            if not result:
+                break
+        return result
+
+    @classmethod
+    def evm_address(cls) -> "CryptoValidator":
+        return cls(
+            ChainRule(lambda x: isinstance(x, str), "Address must be a string"),
+            ChainRule(lambda x: x.startswith("0x"), "EVM address must start with '0x'"),
+            ChainRule(lambda x: len(x) == 42, "EVM address length must be 42 chars"),
+            ChainRule(lambda x: bool(re.match(r"^0x[a-fA-F0-9]{40}$", x)), "Invalid hex characters in EVM address"),
         )
 
-    def check(self, value: Any) -> Tuple[bool, str]:
-        is_valid = self.predicate(value)
-        return is_valid, "" if is_valid else self.error_msg
+    @classmethod
+    def tx_hash(cls) -> "CryptoValidator":
+        return cls(
+            ChainRule(lambda x: isinstance(x, str), "TX hash must be a string"),
+            ChainRule(lambda x: len(x) == 66 and x.startswith("0x"), "TX hash must be 66-char hex with 0x prefix"),
+            ChainRule(lambda x: bool(re.match(r"^0x[a-fA-F0-9]{64}$", x)), "Malformed hex string for transaction hash"),
+        )
 
-# Dynamic rule definitions for crypto payload processing
-is_eth_address = ValidationRule(
-    lambda v: isinstance(v, str) and bool(re.match(r"^0x[a-fA-F0-9]{40}$", v)),
-    "Invalid Ethereum address format"
-)
+    @classmethod
+    def gas_limit(cls, min_gas: int = 21000, max_gas: int = 15000000) -> "CryptoValidator":
+        return cls(
+            ChainRule(lambda x: isinstance(x, int), "Gas limit must be an integer"),
+            ChainRule(lambda x: x >= min_gas, f"Gas limit below minimum threshold of {min_gas}"),
+            ChainRule(lambda x: x <= max_gas, f"Gas limit exceeds maximum cap of {max_gas}"),
+        )
 
-is_positive_amount = ValidationRule(
-    lambda v: isinstance(v, (int, float)) and v > 0,
-    "Amount must be strictly positive"
-)
 
-is_valid_gas = ValidationRule(
-    lambda v: isinstance(v, int) and 21000 <= v <= 15000000,
-    "Gas limit out of standard range [21k, 15M]"
-)
-
-def validate_payload_batch(payloads: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Validates and decorates incoming transaction payloads inside loop."""
-    schema = {
-        "recipient": is_eth_address,
-        "amount": is_positive_amount,
-        "gas_limit": is_valid_gas,
-    }
-    
-    validated_batch = []
-    for payload in payloads:
-        errors = []
-        for field, rule in schema.items():
-            val = payload.get(field)
-            ok, err = rule.check(val)
-            if not ok:
-                errors.append(f"{field}: {err}")
-        
-        if not errors:
-            validated_batch.append({**payload, "_status": "VALIDATED"})
-        else:
-            validated_batch.append({**payload, "_status": "REJECTED", "_errors": errors})
-            
-    return validated_batch
+validate_evm = CryptoValidator.evm_address()
+validate_tx = CryptoValidator.tx_hash()
+validate_gas = CryptoValidator.gas_limit()
