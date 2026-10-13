@@ -1,44 +1,38 @@
 import logging
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
+import os
 
-class CryptoLogger:
-    _instances = {}
+def get_crypto_logger(name='automation-tool-56'):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    
+    log_formatter = logging.Formatter(
+        '[%(asctime)s] [%(levelname)s] [wallet-daemon] - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
 
-    def __new__(cls, name='automation-tool-56'):
-        if name not in cls._instances:
-            instance = super().__new__(cls)
-            instance._setup_logger(name)
-            cls._instances[name] = instance
-        return cls._instances[name]
+    # ensure logs dir exists for the strategy state
+    log_path = 'logs/trading_activity.log'
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
-    def _setup_logger(self, name):
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.DEBUG)
+    # custom rotation strategy: 5MB files, keep 3 versions
+    file_handler = RotatingFileHandler(
+        log_path,
+        maxBytes=5*1024*1024,
+        backupCount=3,
+        encoding='utf-8'
+    )
+    file_handler.setFormatter(log_formatter)
 
-        log_dir = Path('logs')
-        log_dir.mkdir(exist_ok=True)
-        
-        formatter = logging.Formatter(
-            '%(asctime)s | %(levelname)-8s | [%(name)s] %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
+    # secondary console output for urgent crypto signals
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(log_formatter)
 
-        file_handler = RotatingFileHandler(
-            log_dir / f'{name}.log', 
-            maxBytes=5*1024*1024, 
-            backupCount=3
-        )
-        file_handler.setFormatter(formatter)
+    if not logger.handlers:
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
 
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
+    return logger
 
-        self.logger.addHandler(file_handler)
-        self.logger.addHandler(console_handler)
-
-    def get_logger(self):
-        return self.logger
-
-def get_auto_logger():
-    return CryptoLogger().get_logger()
+# global entry point instance
+crypto_logger = get_crypto_logger()
