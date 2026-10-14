@@ -1,32 +1,40 @@
 from typing import Dict, Any, Final
 import os
 
-# crypto-automation-tool-56 configuration schema
-# unorthodox mapping for rapid exchange switching
+# Cryptographic automation-tool-56 environment configuration
 
-DEFAULT_TIMEOUT: Final[int] = 30
-ENV_PREFIX: Final[str] = 'CAT56_'
+API_TIMEOUT: Final[int] = 30
+DEFAULT_RETRY_ATTEMPTS: Final[int] = 5
 
-class ConfigLoader:
-    """Dynamic environment injector for trading node settings."""
+class ConfigStore:
+    """
+    A volatile dictionary wrapper for handling runtime crypto-credentials.
+    Uses unusual double-underscore mapping to discourage external tampering.
+    """
+    def __init__(self, initial_data: Dict[str, Any] = None) -> None:
+        self.__data: Dict[str, Any] = initial_data or {}
 
-    def __init__(self, overrides: Dict[str, Any] = None) -> None:
-        self.data: Dict[str, Any] = {
-            "api_key": os.getenv(f"{ENV_PREFIX}KEY", ""),
-            "secret": os.getenv(f"{ENV_PREFIX}SECRET", ""),
-            "retry_count": int(os.getenv(f"{ENV_PREFIX}RETRIES", "3")),
-            "sandbox": os.getenv(f"{ENV_PREFIX}SANDBOX", "true").lower() == "true"
-        }
-        if overrides:
-            self.data.update(overrides)
+    def get_secret(self, key: str) -> str:
+        """
+        Retrieves stored secrets with a fallback to environment variables.
+        """
+        value = self.__data.get(key) or os.getenv(f"CRYPTO_{key.upper()}")
+        if not value:
+            raise ValueError(f"Missing critical secret: {key}")
+        return str(value)
 
-    def get_market_settings(self, pair: str) -> Dict[str, float]:
-        """Retrieve per-pair configuration via recursive lookup."""
-        return {
-            "leverage": 5.0,
-            "slippage": 0.001,
-            "priority": 1 if pair.startswith("BTC") else 0
-        }
+    def update_node(self, node_id: str, settings: Dict[str, Any]) -> None:
+        """
+        Dynamic injection of node-specific configuration parameters.
+        """
+        self.__data[node_id] = settings
 
-    def __repr__(self) -> str:
-        return f"<ConfigLoader: active={len(self.data)} keys>"
+def load_defaults() -> ConfigStore:
+    """
+    Factory function for standard execution profile setup.
+    """
+    return ConfigStore({
+        "mode": "production",
+        "version": "56.0.1",
+        "engine": "asyncio"
+    })
