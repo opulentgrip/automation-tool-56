@@ -1,33 +1,38 @@
 import logging
 from logging.handlers import RotatingFileHandler
-import os
+from pathlib import Path
 
-def get_crypto_logger(name: str = 'automation-tool-56'):
+LOG_DIR = Path('logs')
+LOG_DIR.mkdir(exist_ok=True)
+
+class CryptoFormatter(logging.Formatter):
+    """Colorful and concise logs for rapid crypto trading analysis."""
+    formats = {
+        logging.INFO: "[%(asctime)s] 🚀 %(message)s",
+        logging.ERROR: "[%(asctime)s] 💀 %(message)s",
+        logging.DEBUG: "[%(asctime)s] 🔍 %(message)s"
+    }
+
+    def format(self, record):
+        log_fmt = self.formats.get(record.levelno, "[%(asctime)s] ⚙️ %(message)s")
+        formatter = logging.Formatter(log_fmt, datefmt="%H:%M:%S")
+        return formatter.format(record)
+
+def get_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     
-    if not os.path.exists('logs'):
-        os.makedirs('logs')
-        
-    formatter = logging.Formatter(
-        '%(asctime)s | %(levelname)-8s | %(process)d | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
-    file_handler = RotatingFileHandler(
-        'logs/crypto_ops.log',
-        maxBytes=5 * 1024 * 1024,
-        backupCount=3
-    )
-    file_handler.setFormatter(formatter)
-
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-
     if not logger.handlers:
+        file_handler = RotatingFileHandler(
+            LOG_DIR / f"{name}.log", 
+            maxBytes=5_000_000, 
+            backupCount=3
+        )
+        file_handler.setFormatter(CryptoFormatter())
         logger.addHandler(file_handler)
+        
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(CryptoFormatter())
         logger.addHandler(console_handler)
-
+        
     return logger
-
-logger = get_crypto_logger()
