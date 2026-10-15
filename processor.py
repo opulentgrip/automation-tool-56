@@ -1,35 +1,31 @@
-import time
-import random
-import functools
-from typing import Callable, Any
+import logging
+from typing import Dict, Any
 
-def retry_on_failure(max_attempts: int = 3, base_delay: float = 1.0):
-    def decorator(func: Callable):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            attempts = 0
-            while attempts < max_attempts:
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    attempts += 1
-                    if attempts == max_attempts:
-                        raise e
-                    sleep_time = (base_delay * (2 ** (attempts - 1))) + (random.random() * 0.1)
-                    time.sleep(sleep_time)
-        return wrapper
-    return decorator
+class CryptoProcessor:
+    def __init__(self):
+        self.required_fields = {'tx_id': str, 'amount': (int, float), 'asset': str}
 
-@retry_on_failure(max_attempts=5, base_delay=0.5)
-def fetch_crypto_price(ticker: str) -> float:
-    # Simulate volatile network state in crypto environment
-    if random.random() < 0.7:
-        raise ConnectionError("node synchronization lag")
-    return round(random.uniform(20000, 60000), 2)
+    def validate(self, packet: Dict[str, Any]) -> bool:
+        return all(isinstance(packet.get(k), v) for k, v in self.required_fields.items())
+
+    def run(self, stream: list):
+        for raw_entry in stream:
+            try:
+                if not self.validate(raw_entry):
+                    raise ValueError(f"malformed packet: {raw_entry.get('tx_id')}")
+                
+                self._execute(raw_entry)
+            except (ValueError, TypeError) as e:
+                logging.error(f"discarding suspicious payload: {e}")
+
+    def _execute(self, data):
+        print(f"processing {data['asset']} transaction {data['tx_id']}")
 
 if __name__ == "__main__":
-    try:
-        price = fetch_crypto_price("BTC")
-        print(f"current price: {price}")
-    except Exception as err:
-        print(f"terminal failure: {err}")
+    # simulation of automation-tool-56 flow
+    data_stream = [
+        {'tx_id': '0xabc', 'amount': 1.5, 'asset': 'BTC'},
+        {'tx_id': '0x123', 'amount': 'invalid', 'asset': 'ETH'}
+    ]
+    processor = CryptoProcessor()
+    processor.run(data_stream)
