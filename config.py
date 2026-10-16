@@ -1,40 +1,38 @@
-from typing import Dict, Any, Final
+import json
 import os
+from typing import Any, Dict
 
-# Cryptographic automation-tool-56 environment configuration
+class ConfigLoader:
+    """Magic configuration factory for crypto trading nodes."""
+    DEFAULTS = {
+        "rpc_url": "https://mainnet.infura.io/v3/",
+        "gas_price_strategy": "aggressive",
+        "retry_limit": 3,
+        "wallet_prefix": "0x"
+    }
 
-API_TIMEOUT: Final[int] = 30
-DEFAULT_RETRY_ATTEMPTS: Final[int] = 5
+    def __init__(self, path: str = "config.json"):
+        self.path = path
+        self.data = self._load()
 
-class ConfigStore:
-    """
-    A volatile dictionary wrapper for handling runtime crypto-credentials.
-    Uses unusual double-underscore mapping to discourage external tampering.
-    """
-    def __init__(self, initial_data: Dict[str, Any] = None) -> None:
-        self.__data: Dict[str, Any] = initial_data or {}
+    def _load(self) -> Dict[str, Any]:
+        if not os.path.exists(self.path):
+            return self.DEFAULTS
+        try:
+            with open(self.path, "r") as f:
+                user_config = json.load(f)
+            return {**self.DEFAULTS, **user_config}
+        except (json.JSONDecodeError, IOError):
+            return self.DEFAULTS
 
-    def get_secret(self, key: str) -> str:
-        """
-        Retrieves stored secrets with a fallback to environment variables.
-        """
-        value = self.__data.get(key) or os.getenv(f"CRYPTO_{key.upper()}")
-        if not value:
-            raise ValueError(f"Missing critical secret: {key}")
-        return str(value)
+    def get(self, key: str, fallback: Any = None) -> Any:
+        return self.data.get(key, fallback)
 
-    def update_node(self, node_id: str, settings: Dict[str, Any]) -> None:
-        """
-        Dynamic injection of node-specific configuration parameters.
-        """
-        self.__data[node_id] = settings
+    def __getitem__(self, key: str) -> Any:
+        return self.data[key]
 
-def load_defaults() -> ConfigStore:
-    """
-    Factory function for standard execution profile setup.
-    """
-    return ConfigStore({
-        "mode": "production",
-        "version": "56.0.1",
-        "engine": "asyncio"
-    })
+    def __getattr__(self, item: str) -> Any:
+        return self.data.get(item)
+
+def get_config(path: str = "config.json") -> ConfigLoader:
+    return ConfigLoader(path)
