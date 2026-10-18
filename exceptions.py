@@ -1,27 +1,32 @@
-class CryptoError(Exception):
-    """Base exception for automation-tool-56."""
+import time
+import functools
+import random
+import logging
 
-class ExchangeConnectionError(CryptoError):
-    """Raised when the socket handshake fails or latency spikes."""
+logger = logging.getLogger('automation-tool-56')
 
-class InsufficientLiquidityError(CryptoError):
-    """Raised when order size exceeds available pool depth."""
+class NetworkError(Exception):
+    """Custom exception for crypto RPC failures."""
+    pass
 
-class RateLimitExceededError(CryptoError):
-    def __init__(self, wait_time: float):
-        self.wait_time = wait_time
-        super().__init__(f"Cooldown active for {wait_time}s")
-
-class SignatureVerificationError(CryptoError):
-    """Raised when payload integrity checks fail."""
-
-class ExecutionTimeoutError(CryptoError):
-    """Raised when order fulfillment exceeds TTL."""
-
-def raise_if_failing(status_code: int, response_data: dict):
-    if 400 <= status_code < 500:
-        if status_code == 429:
-            raise RateLimitExceededError(float(response_data.get('retry_after', 1.0)))
-        raise CryptoError(f"Client error: {response_data}")
-    if status_code >= 500:
-        raise ExchangeConnectionError("Remote exchange infrastructure failure")
+def retry_with_backoff(retries=3, base_delay=1.0, backoff=2.0):
+    """Decorator for jittered exponential backoff retries."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            attempt = 0
+            current_delay = base_delay
+            while attempt < retries:
+                try:
+                    return func(*args, **kwargs)
+                except (NetworkError, ConnectionError) as e:
+                    attempt += 1
+                    if attempt == retries:
+                        logger.error(f"Max retries reached for {func.__name__}")
+                        raise e
+                    sleep_time = current_delay + random.uniform(0, 0.5)
+                    logger.warning(f"Retry {attempt}/{retries} after {sleep_time:.2f}s")
+                    time.sleep(sleep_time)
+                    current_delay *= backoff
+        return wrapper
+    return decorator
