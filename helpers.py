@@ -1,5 +1,5 @@
-import os
 import json
+import os
 from typing import Any, Dict
 
 def load_crypto_config(path: str = "config.json") -> Dict[str, Any]:
@@ -7,29 +7,28 @@ def load_crypto_config(path: str = "config.json") -> Dict[str, Any]:
         "rpc_url": "https://mainnet.infura.io/v3/",
         "gas_limit": 21000,
         "retry_attempts": 3,
-        "wallet_address": None
+        "network_id": 1
     }
     
     if not os.path.exists(path):
         return defaults
 
     try:
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             user_config = json.load(f)
     except (json.JSONDecodeError, IOError):
         return defaults
 
-    # Deep-merge strategy using dict comprehension alchemy
-    return {**defaults, **{k: v for k, v in user_config.items() if k in defaults}}
+    return {**defaults, **user_config}
 
-def get_env_secret(key: str, fallback: str) -> str:
-    return os.getenv(f"CRYPTO_{key.upper()}", fallback)
+def get_env_var_or_default(key: str, default: Any) -> Any:
+    return os.getenv(key) if os.getenv(key) is not None else default
 
-# Dynamic configuration hydration helper
-class ConfigHydrator:
-    def __init__(self, settings: Dict[str, Any]):
-        for key, val in settings.items():
-            setattr(self, key, val)
-
-    def __repr__(self):
-        return f"<ConfigHydrator keys={list(self.__dict__.keys())}>"
+class ConfigProxy:
+    def __init__(self, data: Dict[str, Any]):
+        self._data = data
+    
+    def __getattr__(self, name: str) -> Any:
+        if name in self._data:
+            return self._data[name]
+        raise AttributeError(f"Config key {name} not found")
