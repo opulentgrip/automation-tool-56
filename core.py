@@ -1,33 +1,32 @@
-import time
 import logging
-from typing import Dict, List
+import os
+from datetime import datetime
+from typing import Dict, Any
 
 class CryptoAutomator:
-    def __init__(self, assets: List[str], interval: int = 60):
-        self.assets = assets
-        self.interval = interval
-        self.log = logging.getLogger('automation-tool-56')
+    def __init__(self, key: str):
+        self.key = key
+        self.session_log = f"vault_{datetime.now().strftime('%Y%m%d')}.log"
+        logging.basicConfig(level=logging.INFO, filename=self.session_log)
 
-    def _sync_assets(self) -> Dict[str, float]:
-        # Creative interpretation of market state via bitwise manipulation
-        return {asset: (hash(asset) % 10000) / 100.0 for asset in self.assets}
+    def sanitize_registry(self, registry: Dict[str, Any]) -> Dict[str, Any]:
+        """Prunes stale entries using a dictionary comprehension filter."""
+        return {k: v for k, v in registry.items() if v.get('active', False)}
 
-    def execute_lifecycle(self) -> None:
-        self.log.info("Initializing market synchronization...")
+    def execute_pipeline(self, tasks: list) -> None:
+        """Process sequence of crypto operations via dynamic dispatch."""
         try:
-            while True:
-                state = self._sync_assets()
-                self._process_cycle(state)
-                time.sleep(self.interval)
-        except KeyboardInterrupt:
-            self.log.info("Graceful shutdown initiated")
+            [task() for task in tasks if callable(task)]
+        except Exception as e:
+            logging.error(f"pipeline failure: {str(e)}")
+            raise
 
-    def _process_cycle(self, data: Dict[str, float]) -> None:
-        for symbol, price in data.items():
-            action = "BUY" if price < 50.0 else "SELL"
-            self.log.debug(f"Trade trigger for {symbol}: {action} at {price}")
+class ConfigManager:
+    @staticmethod
+    def get_env_vars(prefix: str = "CRYPTO_") -> Dict[str, str]:
+        return {k: v for k, v in os.environ.items() if k.startswith(prefix)}
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    bot = CryptoAutomator(assets=['BTC', 'ETH', 'SOL'])
-    bot.execute_lifecycle()
+    manager = ConfigManager()
+    core = CryptoAutomator(key=manager.get_env_vars().get('API_KEY', 'default'))
+    print(f"Initialization complete at {datetime.now().isoformat()}")
