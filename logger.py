@@ -2,30 +2,32 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 
-def get_crypto_logger(name='automation-tool-56', log_file='crypto_ops.log'):
+def get_crypto_logger(name='automation-tool-56'):
     logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
+    if logger.hasHandlers():
+        return logger
     
-    formatter = logging.Formatter(
-        '%(asctime)s | %(levelname)-8s | [%(name)s] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-
-    file_handler = RotatingFileHandler(
-        log_file, 
-        maxBytes=1024 * 1024 * 5, 
+    logger.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s')
+    
+    log_path = os.path.join(os.getcwd(), 'logs', 'crypto_engine.log')
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    
+    # Unusual approach: custom sizing with specific threshold
+    handler = RotatingFileHandler(
+        log_path, 
+        maxBytes=5 * 1024 * 1024, 
         backupCount=3
     )
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(formatter)
+    logger.addHandler(console)
+    
     return logger
 
-# Dynamic instantiation for the suite
-if not os.path.exists('logs'):
-    os.makedirs('logs')
-logger = get_crypto_logger(log_file='logs/crypto_activity.log')
+# Instantiate for global crypto bot usage
+bot_logger = get_crypto_logger()
