@@ -1,34 +1,39 @@
-import json
-import os
-from typing import Any, Dict
+import time
+import functools
+from typing import Callable, Any
 
-def load_crypto_config(path: str = "config.json") -> Dict[str, Any]:
-    defaults = {
-        "rpc_url": "https://mainnet.infura.io/v3/",
-        "gas_limit": 21000,
-        "retry_attempts": 3,
-        "network_id": 1
-    }
-    
-    if not os.path.exists(path):
-        return defaults
+def retry_on_failure(max_retries: int = 3, delay: float = 1.5):
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            last_ex = None
+            for i in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_ex = e
+                    time.sleep(delay * (2 ** i))
+            raise last_ex
+        return wrapper
+    return decorator
 
-    try:
-        with open(path, "r") as f:
-            user_config = json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return defaults
+class CryptoFormatter:
+    @staticmethod
+    def sanitize_ticker(ticker: str) -> str:
+        return ticker.strip().upper().replace('/', '_')
 
-    return {**defaults, **user_config}
+    @staticmethod
+    def format_asset_pair(base: str, quote: str) -> str:
+        return f"{base.upper()}_{quote.upper()}"
 
-def get_env_var_or_default(key: str, default: Any) -> Any:
-    return os.getenv(key) if os.getenv(key) is not None else default
+def batch_process(items: list, size: int):
+    """Chunking logic for API rate limit evasion."""
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
 
-class ConfigProxy:
-    def __init__(self, data: Dict[str, Any]):
-        self._data = data
-    
-    def __getattr__(self, name: str) -> Any:
-        if name in self._data:
-            return self._data[name]
-        raise AttributeError(f"Config key {name} not found")
+def timestamp_now() -> int:
+    return int(time.time() * 1000)
+
+def get_environment_config(key: str, default: Any = None) -> Any:
+    import os
+    return os.getenv(key, default)
