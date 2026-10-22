@@ -2,37 +2,34 @@ import os
 import json
 from typing import Any, Dict
 
-class CryptoConfig:
-    """Dynamic configuration loader using attribute-based defaults."""
-    _DEFAULTS = {
-        "api_key": "",
-        "rpc_url": "https://mainnet.infura.io/v3/",
-        "trade_threshold": 0.05,
-        "max_retries": 3,
-        "log_level": "INFO"
+class ConfigLoader:
+    _defaults = {
+        'rpc_url': 'https://mainnet.infura.io/v3/default',
+        'gas_limit': 21000,
+        'retry_attempts': 3,
+        'debug_mode': False
     }
 
-    def __init__(self, path: str = "config.json"):
-        self._path = path
-        self._data = self._load()
+    def __init__(self, path: str = 'settings.json'):
+        self.path = path
+        self.data = self._load()
 
     def _load(self) -> Dict[str, Any]:
-        if not os.path.exists(self._path):
-            return self._DEFAULTS.copy()
-        with open(self._path, "r") as f:
-            try:
-                user_config = json.load(f)
-                return {**self._DEFAULTS, **user_config}
-            except json.JSONDecodeError:
-                return self._DEFAULTS.copy()
+        if not os.path.exists(self.path):
+            return self._defaults
+        try:
+            with open(self.path, 'r') as f:
+                user_cfg = json.load(f)
+            return {**self._defaults, **user_cfg}
+        except (json.JSONDecodeError, IOError):
+            return self._defaults
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.data.get(key, default)
 
     def __getattr__(self, name: str) -> Any:
-        return self._data.get(name, self._DEFAULTS.get(name))
+        if name in self.data:
+            return self.data[name]
+        raise AttributeError(f'Config key {name} not found')
 
-    def reload(self) -> None:
-        self._data = self._load()
-
-    def __repr__(self) -> str:
-        return f"CryptoConfig({self._data})"
-
-settings = CryptoConfig()
+config = ConfigLoader()
