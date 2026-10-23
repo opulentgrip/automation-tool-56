@@ -1,32 +1,38 @@
 import time
 import functools
-import random
-import logging
+from typing import Callable, Any
 
-logger = logging.getLogger('automation-tool-56')
-
-class NetworkError(Exception):
-    """Custom exception for crypto RPC failures."""
+class CryptoTransactionError(Exception):
+    """Base exception for automation-tool-56 operations."""
     pass
 
-def retry_with_backoff(retries=3, base_delay=1.0, backoff=2.0):
-    """Decorator for jittered exponential backoff retries."""
-    def decorator(func):
+class RateLimitHit(CryptoTransactionError):
+    """Custom error for exchange throttles."""
+    pass
+
+def retry_with_backoff(retries: int = 3, backoff: float = 0.5):
+    """Decorator for jittered exponential backoff."""
+    def decorator(func: Callable):
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            attempt = 0
-            current_delay = base_delay
-            while attempt < retries:
+        def wrapper(*args, **kwargs) -> Any:
+            last_ex = None
+            for i in range(retries):
                 try:
                     return func(*args, **kwargs)
-                except (NetworkError, ConnectionError) as e:
-                    attempt += 1
-                    if attempt == retries:
-                        logger.error(f"Max retries reached for {func.__name__}")
-                        raise e
-                    sleep_time = current_delay + random.uniform(0, 0.5)
-                    logger.warning(f"Retry {attempt}/{retries} after {sleep_time:.2f}s")
-                    time.sleep(sleep_time)
-                    current_delay *= backoff
+                except RateLimitHit as e:
+                    last_ex = e
+                    time.sleep(backoff * (2 ** i))
+            raise last_ex
         return wrapper
     return decorator
+
+def fast_fail(func: Callable):
+    """Immediate termination of stale crypto tasks."""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs) -> Any:
+        start = time.perf_counter()
+        result = func(*args, **kwargs)
+        if (time.perf_counter() - start) > 2.0:
+            raise CryptoTransactionError("Latency threshold breached")
+        return result
+    return wrapper
