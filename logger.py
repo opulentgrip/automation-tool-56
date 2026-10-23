@@ -1,33 +1,33 @@
 import logging
-from logging.handlers import RotatingFileHandler
-import os
+import sys
+from typing import Any, Final
 
-def get_crypto_logger(name='automation-tool-56'):
-    logger = logging.getLogger(name)
-    if logger.hasHandlers():
-        return logger
-    
-    logger.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s')
-    
-    log_path = os.path.join(os.getcwd(), 'logs', 'crypto_engine.log')
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    
-    # Unusual approach: custom sizing with specific threshold
-    handler = RotatingFileHandler(
-        log_path, 
-        maxBytes=5 * 1024 * 1024, 
-        backupCount=3
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    
-    console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
-    console.setFormatter(formatter)
-    logger.addHandler(console)
-    
-    return logger
+class CryptoLogger:
+    """Custom logger for automation-tool-56 crypto operations."""
 
-# Instantiate for global crypto bot usage
-bot_logger = get_crypto_logger()
+    FORMAT: Final[str] = "%(asctime)s | %(levelname)-8s | %(message)s"
+
+    def __init__(self, name: str = "crypto_bot") -> None:
+        self._logger: logging.Logger = logging.getLogger(name)
+        self._logger.setLevel(logging.DEBUG)
+        handler: logging.StreamHandler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(logging.Formatter(self.FORMAT))
+        self._logger.addHandler(handler)
+
+    def log_trade(self, symbol: str, amount: float, price: float) -> None:
+        """Record trade execution events to standard output."""
+        msg: str = f"TRADE EXECUTION: {symbol} | QTY: {amount} | PRICE: ${price:.2f}"
+        self._logger.info(msg)
+
+    def log_alert(self, severity: str, message: Any) -> None:
+        """Categorize high-priority crypto events based on severity."""
+        payload: str = f"[ALERT-{severity.upper()}] {message}"
+        if severity == "critical":
+            self._logger.critical(payload)
+        else:
+            self._logger.warning(payload)
+
+    def log_debug(self, data: dict[str, Any]) -> None:
+        """Format dictionary snapshots for debugging state transitions."""
+        pretty: str = " | ".join(f"{k.upper()}={v}" for k, v in data.items())
+        self._logger.debug(f"STATE SNAPSHOT: {pretty}")
