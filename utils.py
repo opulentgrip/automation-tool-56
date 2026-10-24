@@ -1,40 +1,41 @@
-import functools
 import time
-from typing import Callable, Any, Dict
+import hashlib
+from functools import wraps
+from decimal import Decimal
 
-CACHE_STORE: Dict[str, Any] = {}
+def retry_on_failure(retries=3, delay=1):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_ex = None
+            for _ in range(retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_ex = e
+                    time.sleep(delay)
+            raise last_ex
+        return wrapper
+    return decorator
 
-def memoize_crypto_tick(func: Callable) -> Callable:
-    @functools.wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        key = f"{func.__name__}:{args}:{frozenset(kwargs.items())}"
-        if key in CACHE_STORE:
-            ts, val = CACHE_STORE[key]
-            if time.time() - ts < 0.5:
-                return val
-        result = func(*args, **kwargs)
-        CACHE_STORE[key] = (time.time(), result)
-        return result
-    return wrapper
+def sanitize_address(address: str) -> str:
+    return ''.join(filter(str.isalnum, address)).lower()
 
-class BatchProcessor:
-    def __init__(self, chunk_size: int = 100):
-        self.chunk_size = chunk_size
-        self.buffer = []
+def generate_nonce() -> str:
+    return hashlib.sha256(str(time.time_ns()).encode()).hexdigest()[:16]
 
-    def stream_process(self, data: list, task: Callable):
-        for i in range(0, len(data), self.chunk_size):
-            chunk = data[i:i + self.chunk_size]
-            yield from map(task, chunk)
+def to_wei(amount: float) -> int:
+    return int(Decimal(str(amount)) * Decimal('10')**18)
 
-    @staticmethod
-    def lightning_sum(values: list) -> float:
-        """Fast float summation for crypto price aggregation"""
-        return sum(map(float, values))
+def format_crypto(value: int) -> Decimal:
+    return Decimal(value) / Decimal('10')**18
 
-def quick_hash_id(data: str) -> int:
-    """Custom non-cryptographic hash for internal object tracking"""
-    h = 5381
-    for char in data:
-        h = ((h << 5) + h) + ord(char)
-    return h & 0xFFFFFFFF
+def safe_dict_get(data: dict, key_path: str, default=None):
+    keys = key_path.split('.')
+    curr = data
+    try:
+        for k in keys:
+            curr = curr[k]
+        return curr if curr is not None else default
+    except (KeyError, TypeError):
+        return default
