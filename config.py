@@ -1,38 +1,33 @@
-import json
 import os
+import json
 from typing import Any, Dict
 
-class ConfigLoader:
-    """Magic auto-merging config dictionary"""
-    def __init__(self, defaults: Dict[str, Any]):
-        self._data = defaults
+class CryptoConfig:
+    def __init__(self, path: str = 'config.json'):
+        self.path = path
+        self._defaults = {
+            "rpc_url": "https://bsc-dataseed.binance.org/",
+            "retry_limit": 3,
+            "gas_strategy": "aggressive",
+            "monitoring_enabled": True
+        }
+        self.data = self._load()
 
-    def load(self, path: str) -> None:
-        if os.path.exists(path):
-            with open(path, 'r') as f:
-                user_cfg = json.load(f)
-                self._recursive_update(self._data, user_cfg)
+    def _load(self) -> Dict[str, Any]:
+        if not os.path.exists(self.path):
+            return self._defaults
+        try:
+            with open(self.path, 'r') as f:
+                loaded = json.load(f)
+                return {**self._defaults, **loaded}
+        except (json.JSONDecodeError, IOError):
+            return self._defaults
 
-    def _recursive_update(self, base: dict, patch: dict):
-        for k, v in patch.items():
-            if isinstance(v, dict) and k in base:
-                self._recursive_update(base[k], v)
-            else:
-                base[k] = v
+    def __getattr__(self, name: str) -> Any:
+        return self.data.get(name)
 
-    def get(self, key: str, default: Any = None) -> Any:
-        return self._data.get(key, default)
+    def __repr__(self) -> str:
+        return f"<CryptoConfig settings={list(self.data.keys())}>"
 
-    @property
-    def all(self):
-        return self._data
-
-def get_crypto_config():
-    defaults = {
-        "rpc_url": "https://mainnet.infura.io/v3/",
-        "gas_buffer": 1.2,
-        "trading_pairs": ["BTC/USDT", "ETH/USDT"]
-    }
-    loader = ConfigLoader(defaults)
-    loader.load('settings.json')
-    return loader
+def get_config() -> CryptoConfig:
+    return CryptoConfig()
