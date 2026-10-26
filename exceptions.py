@@ -1,38 +1,25 @@
-import time
-import functools
-from typing import Callable, Any
+class CryptoAutomationError(Exception):
+    """Base exception for automation-tool-56."""
 
-class CryptoTransactionError(Exception):
-    """Base exception for automation-tool-56 operations."""
-    pass
+class ExchangeConnectionError(CryptoAutomationError):
+    """Raised when the socket handshake or API fails."""
 
-class RateLimitHit(CryptoTransactionError):
-    """Custom error for exchange throttles."""
-    pass
+class RateLimitExceededError(CryptoAutomationError):
+    """Custom handling for exchange cooldown policies."""
 
-def retry_with_backoff(retries: int = 3, backoff: float = 0.5):
-    """Decorator for jittered exponential backoff."""
-    def decorator(func: Callable):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> Any:
-            last_ex = None
-            for i in range(retries):
-                try:
-                    return func(*args, **kwargs)
-                except RateLimitHit as e:
-                    last_ex = e
-                    time.sleep(backoff * (2 ** i))
-            raise last_ex
-        return wrapper
-    return decorator
+class InsufficientFundsError(CryptoAutomationError):
+    """Raised when wallet balance is insufficient for trade."""
 
-def fast_fail(func: Callable):
-    """Immediate termination of stale crypto tasks."""
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs) -> Any:
-        start = time.perf_counter()
-        result = func(*args, **kwargs)
-        if (time.perf_counter() - start) > 2.0:
-            raise CryptoTransactionError("Latency threshold breached")
-        return result
-    return wrapper
+class OrderExecutionError(CryptoAutomationError):
+    """Errors during lifecycle of active order placement."""
+
+class InvalidConfigurationError(CryptoAutomationError):
+    """Fatal errors for startup parameter integrity."""
+
+def get_error_context(error: CryptoAutomationError) -> dict:
+    """Returns structured diagnostic payload for logger."""
+    return {
+        "type": error.__class__.__name__,
+        "msg": str(error),
+        "severity": "critical" if isinstance(error, (ExchangeConnectionError, InsufficientFundsError)) else "warning"
+    }
