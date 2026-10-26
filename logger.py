@@ -1,33 +1,30 @@
 import logging
-import sys
-from typing import Any, Final
+from logging.handlers import RotatingFileHandler
+import os
 
-class CryptoLogger:
-    """Custom logger for automation-tool-56 crypto operations."""
+def get_crypto_logger(name='automation-tool-56', log_file='crypto_trade.log'):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    
+    formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)-8s | %(module)s:%(lineno)d | %(message)s'
+    )
+    
+    # Rotate at 5MB, keep 3 historical logs
+    handler = RotatingFileHandler(
+        log_file, 
+        maxBytes=5*1024*1024, 
+        backupCount=3
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    
+    # Also stream to console for immediate trade monitoring
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    logger.addHandler(console)
+    
+    return logger
 
-    FORMAT: Final[str] = "%(asctime)s | %(levelname)-8s | %(message)s"
-
-    def __init__(self, name: str = "crypto_bot") -> None:
-        self._logger: logging.Logger = logging.getLogger(name)
-        self._logger.setLevel(logging.DEBUG)
-        handler: logging.StreamHandler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter(self.FORMAT))
-        self._logger.addHandler(handler)
-
-    def log_trade(self, symbol: str, amount: float, price: float) -> None:
-        """Record trade execution events to standard output."""
-        msg: str = f"TRADE EXECUTION: {symbol} | QTY: {amount} | PRICE: ${price:.2f}"
-        self._logger.info(msg)
-
-    def log_alert(self, severity: str, message: Any) -> None:
-        """Categorize high-priority crypto events based on severity."""
-        payload: str = f"[ALERT-{severity.upper()}] {message}"
-        if severity == "critical":
-            self._logger.critical(payload)
-        else:
-            self._logger.warning(payload)
-
-    def log_debug(self, data: dict[str, Any]) -> None:
-        """Format dictionary snapshots for debugging state transitions."""
-        pretty: str = " | ".join(f"{k.upper()}={v}" for k, v in data.items())
-        self._logger.debug(f"STATE SNAPSHOT: {pretty}")
+# Instantiate singleton logger for the bot
+log = get_crypto_logger()
