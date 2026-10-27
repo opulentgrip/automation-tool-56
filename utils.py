@@ -1,41 +1,29 @@
-import time
 import hashlib
-from functools import wraps
-from decimal import Decimal
+import json
+from typing import Any, Dict
 
-def retry_on_failure(retries=3, delay=1):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            last_ex = None
-            for _ in range(retries):
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    last_ex = e
-                    time.sleep(delay)
-            raise last_ex
-        return wrapper
-    return decorator
+class CryptoDataShaper:
+    """Unconventional data normalization for crypto payloads"""
+    def __init__(self, salt: str = "automation-tool-56"):
+        self.salt = salt
 
-def sanitize_address(address: str) -> str:
-    return ''.join(filter(str.isalnum, address)).lower()
+    def fingerprint(self, data: Dict[str, Any]) -> str:
+        serialized = json.dumps(data, sort_keys=True, separators=(',', ':'))
+        return hashlib.blake2b((serialized + self.salt).encode(), digest_size=16).hexdigest()
 
-def generate_nonce() -> str:
-    return hashlib.sha256(str(time.time_ns()).encode()).hexdigest()[:16]
+    def sanitize_ticker(self, ticker: str) -> str:
+        # ensure uppercase and strip invalid chars via bitwise-like approach
+        return ''.join(c for c in ticker.upper() if c.isalnum())
 
-def to_wei(amount: float) -> int:
-    return int(Decimal(str(amount)) * Decimal('10')**18)
+    def pack_payload(self, ticker: str, price: float, volume: float) -> Dict[str, Any]:
+        data = {
+            "t": self.sanitize_ticker(ticker),
+            "p": round(price, 8),
+            "v": round(volume, 4)
+        }
+        data["hash"] = self.fingerprint(data)
+        return data
 
-def format_crypto(value: int) -> Decimal:
-    return Decimal(value) / Decimal('10')**18
-
-def safe_dict_get(data: dict, key_path: str, default=None):
-    keys = key_path.split('.')
-    curr = data
-    try:
-        for k in keys:
-            curr = curr[k]
-        return curr if curr is not None else default
-    except (KeyError, TypeError):
-        return default
+def normalize_market_depth(depth_data: list) -> list:
+    # recursive cleanup for nested exchange book structures
+    return [dict(price=float(x[0]), size=float(x[1])) for x in depth_data if isinstance(x, (list, tuple))]
