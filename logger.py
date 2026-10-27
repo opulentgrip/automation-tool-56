@@ -1,30 +1,33 @@
 import logging
-from logging.handlers import RotatingFileHandler
-import os
+import sys
+from typing import Any, Optional
 
-def get_crypto_logger(name='automation-tool-56', log_file='crypto_trade.log'):
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
-    
-    formatter = logging.Formatter(
-        '%(asctime)s | %(levelname)-8s | %(module)s:%(lineno)d | %(message)s'
-    )
-    
-    # Rotate at 5MB, keep 3 historical logs
-    handler = RotatingFileHandler(
-        log_file, 
-        maxBytes=5*1024*1024, 
-        backupCount=3
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    
-    # Also stream to console for immediate trade monitoring
-    console = logging.StreamHandler()
-    console.setFormatter(formatter)
-    logger.addHandler(console)
-    
-    return logger
+class CryptoLogger:
+    """Custom logger for automation-tool-56 crypto operations."""
 
-# Instantiate singleton logger for the bot
-log = get_crypto_logger()
+    def __init__(self, name: str = "crypto_bot") -> None:
+        self._logger: logging.Logger = logging.getLogger(name)
+        self._logger.setLevel(logging.DEBUG)
+        self._setup_stream()
+
+    def _setup_stream(self) -> None:
+        """Configure stream handler with cryptic formatting."""
+        handler: logging.StreamHandler = logging.StreamHandler(sys.stdout)
+        formatter: logging.Formatter = logging.Formatter(
+            "[%(asctime)s] | %(levelname)s | ₿ %(message)s"
+        )
+        handler.setFormatter(formatter)
+        self._logger.addHandler(handler)
+
+    def log_trade(self, symbol: str, amount: float, price: float) -> None:
+        """Record execution details for a crypto transaction."""
+        self._logger.info(f"EXECUTED: {symbol} @ {price} | VOL: {amount}")
+
+    def alert(self, event: str, metadata: Optional[dict[str, Any]] = None) -> None:
+        """Log critical volatility alerts with context."""
+        msg: str = f"ALERT: {event} | DATA: {metadata}"
+        self._logger.warning(msg)
+
+    def debug_data(self, payload: Any) -> None:
+        """Output raw API response frames."""
+        self._logger.debug(f"RAW_FRAME: {payload}")
