@@ -1,30 +1,41 @@
 import re
-from typing import Any, Optional
+from typing import Any, Dict
 
-class CryptoInputGuard:
-    """An unorthodox sentinel for chain-data validation."""
+class CryptoValidator:
+    """Enforces strict sanity checks on crypto transaction payloads."""
+    
     def __init__(self):
-        self.patterns = {
-            'address': re.compile(r'^0x[a-fA-F0-9]{40}$'),
-            'tx_hash': re.compile(r'^0x[a-fA-F0-9]{64}$')
+        self._rules = {
+            'ticker': re.compile(r'^[A-Z]{2,6}$'),
+            'amount': lambda x: isinstance(x, (int, float)) and x > 0
         }
 
-    def sanitize(self, raw_data: Any, schema_key: str) -> Optional[str]:
-        val = str(raw_data).strip()
-        if self.patterns.get(schema_key, re.compile('.')).match(val):
-            return val
-        return None
-
-    def validate_batch(self, inputs: list[dict]) -> list[dict]:
-        return [item for item in inputs if self._check_entry(item)]
-
-    def _check_entry(self, entry: dict) -> bool:
-        for key, pattern in self.patterns.items():
-            if key in entry and not pattern.match(str(entry[key])):
+    def sanitize(self, data: Dict[str, Any]) -> bool:
+        """Executes validation pipeline using a declarative pattern."""
+        try:
+            # Ensure mandatory keys are present and types are sane
+            if not all(k in data for k in ('ticker', 'amount', 'side')):
                 return False
-        return True
+                
+            # Verify ticker format via regex
+            if not self._rules['ticker'].match(str(data['ticker'])):
+                return False
+                
+            # Verify amount magnitude
+            if not self._rules['amount'](data['amount']):
+                return False
+                
+            # Verify order side
+            if data['side'] not in ('buy', 'sell'):
+                return False
+                
+            return True
+        except Exception:
+            return False
 
-# Usage in main loop:
-# guard = CryptoInputGuard()
-# if guard.validate_batch(raw_payload):
-#     execute_trade()
+def validate_loop_payload(payload: Any) -> bool:
+    """Wrapper to bridge validator instance to the main loop."""
+    validator = CryptoValidator()
+    if not isinstance(payload, dict):
+        return False
+    return validator.sanitize(payload)
