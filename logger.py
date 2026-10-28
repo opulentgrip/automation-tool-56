@@ -1,33 +1,68 @@
 import logging
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+import re
 import sys
-from typing import Any, Optional
 
-class CryptoLogger:
-    """Custom logger for automation-tool-56 crypto operations."""
 
-    def __init__(self, name: str = "crypto_bot") -> None:
-        self._logger: logging.Logger = logging.getLogger(name)
-        self._logger.setLevel(logging.DEBUG)
-        self._setup_stream()
+class CryptoSymbolFormatter(logging.Formatter):
+    """Custom formatter highlighting crypto symbols and transaction hashes."""
 
-    def _setup_stream(self) -> None:
-        """Configure stream handler with cryptic formatting."""
-        handler: logging.StreamHandler = logging.StreamHandler(sys.stdout)
-        formatter: logging.Formatter = logging.Formatter(
-            "[%(asctime)s] | %(levelname)s | ₿ %(message)s"
-        )
-        handler.setFormatter(formatter)
-        self._logger.addHandler(handler)
+    TICKER_PATTERN = re.compile(r"\b(BTC|ETH|SOL|USDT|BNB|XRP|ADA|DOGE)\b")
+    HEX_PATTERN = re.compile(r"\b0x[a-fA-F0-9]{40}\b")
 
-    def log_trade(self, symbol: str, amount: float, price: float) -> None:
-        """Record execution details for a crypto transaction."""
-        self._logger.info(f"EXECUTED: {symbol} @ {price} | VOL: {amount}")
+    def __init__(self, fmt=None, datefmt=None, colorize=True):
+        super().__init__(fmt, datefmt)
+        self.colorize = colorize
 
-    def alert(self, event: str, metadata: Optional[dict[str, Any]] = None) -> None:
-        """Log critical volatility alerts with context."""
-        msg: str = f"ALERT: {event} | DATA: {metadata}"
-        self._logger.warning(msg)
+    def format(self, record):
+        message = super().format(record)
+        if self.colorize:
+            message = self.TICKER_PATTERN.sub(r"[⚡\1]", message)
+            message = self.HEX_PATTERN.sub(
+                lambda m: f"🔗{m.group(0)[:6]}...{m.group(0)[-4:]}", message
+            )
+        return message
 
-    def debug_data(self, payload: Any) -> None:
-        """Output raw API response frames."""
-        self._logger.debug(f"RAW_FRAME: {payload}")
+
+def get_crypto_logger(
+    name: str = "crypto_auto",
+    log_file: str = "bot_activity.log",
+    max_bytes: int = 2 * 1024 * 1024,
+    backup_count: int = 5,
+) -> logging.Logger:
+    """Configures and returns a dual console/rotating-file logger."""
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+
+    if logger.handlers:
+        return logger
+
+    log_path = Path("logs")
+    log_path.mkdir(exist_ok=True)
+    full_path = log_path / log_file
+
+    log_format = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(
+        CryptoSymbolFormatter(log_format, date_format, colorize=True)
+    )
+
+    file_handler = RotatingFileHandler(
+        full_path, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
+    )
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(
+        CryptoSymbolFormatter(log_format, date_format, colorize=False)
+    )
+
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+
+    return logger
+
+
+bot_logger = get_crypto_logger()
