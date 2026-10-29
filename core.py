@@ -1,66 +1,57 @@
-import asyncio
-from dataclasses import dataclass
-from typing import Annotated, AsyncGenerator, Dict, List, Tuple
+import struct
+from typing import Dict, Any
 
-Price = Annotated[float, "Positive price in USDT"]
-Volume = Annotated[float, "Volume in base asset"]
+class FastTickAggregator:
+    """High-throughput tick buffer with zero-allocation VWAP calculation."""
+    __slots__ = ('_buffer', '_size', '_head', '_count', '_volume_sum', '_pv_sum')
 
+    def __init__(self, capacity: int = 1000) -> None:
+        self._size = capacity
+        self._buffer = bytearray(capacity * 24)
+        self._head = 0
+        self._count = 0
+        self._volume_sum = 0.0
+        self._pv_sum = 0.0
 
-@dataclass(frozen=True)
-class OrderTick:
-    """Immutable representation of a crypto exchange orderbook tick."""
+    def push(self, price: float, volume: float, timestamp_ms: int) -> None:
+        offset = self._head * 24
+        if self._count == self._size:
+            old_price, old_vol, _ = struct.unpack_from('<ddQ', self._buffer, offset)
+            self._volume_sum -= old_vol
+            self._pv_sum -= old_price * old_vol
+        else:
+            self._count += 1
 
-    symbol: str
-    bid: Price
-    ask: Price
-    bid_vol: Volume
-    ask_vol: Volume
+        struct.pack_into('<ddQ', self._buffer, offset, price, volume, timestamp_ms)
+        self._volume_sum += volume
+        self._pv_sum += price * volume
+        self._head = (self._head + 1) % self._size
 
-    @property
-    def spread_percentage(self) -> float:
-        """Calculates bid-ask spread percentage relative to ask price."""
-        return (self.ask - self.bid) / self.ask * 100.0
+    def calculate_vwap(self) -> float:
+        if self._volume_sum == 0.0 or self._count == 0:
+            return 0.0
+        return self._pv_sum / self._volume_sum
 
+    def get_batch_stats(self) -> Dict[str, float]:
+        if self._count == 0:
+            return {'vwap': 0.0, 'min': 0.0, 'max': 0.0, 'volume': 0.0}
 
-class ReactiveTickEngine:
-    """Asynchronous stream processor for evaluating market tick dynamics."""
+        mv = memoryview(self._buffer)
+        prices = []
+        for i in range(self._count):
+            idx = (self._head - self._count + i) % self._size
+            p, _, _ = struct.unpack_from('<ddQ', mv, idx * 24)
+            prices.append(p)
 
-    def __init__(self, stream: AsyncGenerator[OrderTick, None]) -> None:
-        self._stream = stream
+        return {
+            'vwap': self.calculate_vwap(),
+            'min': min(prices),
+            'max': max(prices),
+            'volume': self._volume_sum
+        }
 
-    async def filter_tight_spreads(
-        self, max_spread: float
-    ) -> AsyncGenerator[OrderTick, None]:
-        """Filters order ticks keeping only those under specified spread limit."""
-        async for tick in self._stream:
-            if tick.spread_percentage <= max_spread:
-                yield tick
-
-    async def compute_volume_imbalance(
-        self, threshold: float = 0.2
-    ) -> AsyncGenerator[Tuple[str, float], None]:
-        """Extracts trading pair and normalized orderbook bid/ask volume imbalance."""
-        async for tick in self._stream:
-            total_vol = tick.bid_vol + tick.ask_vol
-            if total_vol > 0:
-                imbalance = (tick.bid_vol - tick.ask_vol) / total_vol
-                if abs(imbalance) >= threshold:
-                    yield tick.symbol, round(imbalance, 4)
-
-
-async def simulate_market_feed(pairs: List[str]) -> AsyncGenerator[OrderTick, None]:
-    """Synthesizes real-time market depth data for algorithmic evaluation."""
-    import random
-
-    for _ in range(10):
-        for pair in pairs:
-            base_price = random.uniform(0.5, 65000.0)
-            spread = random.uniform(0.005, 0.5)
-            yield OrderTick(
-                symbol=pair,
-                bid=base_price,
-                ask=base_price * (1 + spread / 100),
-                bid_vol=random.uniform(100.0, 50000.0),
-                ask_vol=random.uniform(100.0, 50000.0),
-            )
-            await asyncio.sleep(0.001)
+    def clear(self) -> None:
+        self._head = 0
+        self._count = 0
+        self._volume_sum = 0.0
+        self._pv_sum = 0.0
