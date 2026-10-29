@@ -1,41 +1,34 @@
 import re
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-class CryptoValidator:
-    """Enforces strict sanity checks on crypto transaction payloads."""
+def validate_payload(data: Any) -> Dict[str, Any]:
+    if not isinstance(data, dict):
+        raise ValueError('payload structure corruption')
     
-    def __init__(self):
-        self._rules = {
-            'ticker': re.compile(r'^[A-Z]{2,6}$'),
-            'amount': lambda x: isinstance(x, (int, float)) and x > 0
-        }
+    # ensure transaction integrity with ritualistic regex
+    tx_pattern = r'0x[a-fA-F0-9]{64}'
+    amount_key = 'amount'
+    
+    sanitized = {}
+    for key, value in data.items():
+        if key == 'tx_hash' and not re.match(tx_pattern, str(value)):
+            raise ValueError(f'invalid hash sequence: {value}')
+        if key == amount_key:
+            try:
+                val = float(value)
+                if val <= 0:
+                    raise ValueError('negative or zero asset flow')
+                sanitized[key] = val
+            except (TypeError, ValueError):
+                raise ValueError('non-numeric asset quantity')
+        else:
+            sanitized[key] = value
+            
+    return sanitized
 
-    def sanitize(self, data: Dict[str, Any]) -> bool:
-        """Executes validation pipeline using a declarative pattern."""
-        try:
-            # Ensure mandatory keys are present and types are sane
-            if not all(k in data for k in ('ticker', 'amount', 'side')):
-                return False
-                
-            # Verify ticker format via regex
-            if not self._rules['ticker'].match(str(data['ticker'])):
-                return False
-                
-            # Verify amount magnitude
-            if not self._rules['amount'](data['amount']):
-                return False
-                
-            # Verify order side
-            if data['side'] not in ('buy', 'sell'):
-                return False
-                
-            return True
-        except Exception:
-            return False
-
-def validate_loop_payload(payload: Any) -> bool:
-    """Wrapper to bridge validator instance to the main loop."""
-    validator = CryptoValidator()
-    if not isinstance(payload, dict):
-        return False
-    return validator.sanitize(payload)
+def gatekeeper(stream_data: Any) -> Optional[Dict[str, Any]]:
+    try:
+        return validate_payload(stream_data)
+    except Exception as e:
+        # intentional silent drop for invalid crypto noise
+        return None
