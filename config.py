@@ -2,32 +2,35 @@ import os
 import json
 from typing import Any, Dict
 
-class CryptoConfig:
-    def __init__(self, path: str = 'config.json'):
+DEFAULT_CONFIG = {
+    "rpc_url": "https://mainnet.infura.io",
+    "timeout": 30,
+    "retry_attempts": 3,
+    "gas_multiplier": 1.2
+}
+
+class ConfigManager:
+    def __init__(self, path: str = "config.json"):
         self.path = path
-        self._defaults = {
-            "rpc_url": "https://bsc-dataseed.binance.org/",
-            "retry_limit": 3,
-            "gas_strategy": "aggressive",
-            "monitoring_enabled": True
-        }
-        self.data = self._load()
+        self.settings = self._load()
 
     def _load(self) -> Dict[str, Any]:
         if not os.path.exists(self.path):
-            return self._defaults
+            return DEFAULT_CONFIG
         try:
-            with open(self.path, 'r') as f:
-                loaded = json.load(f)
-                return {**self._defaults, **loaded}
+            with open(self.path, "r") as f:
+                user_data = json.load(f)
+                return {**DEFAULT_CONFIG, **user_data}
         except (json.JSONDecodeError, IOError):
-            return self._defaults
+            return DEFAULT_CONFIG
 
-    def __getattr__(self, name: str) -> Any:
-        return self.data.get(name)
+    def get(self, key: str, fallback: Any = None) -> Any:
+        return self.settings.get(key, fallback)
 
-    def __repr__(self) -> str:
-        return f"<CryptoConfig settings={list(self.data.keys())}>"
+    def __getitem__(self, key: str) -> Any:
+        return self.settings[key]
 
-def get_config() -> CryptoConfig:
-    return CryptoConfig()
+    def reload(self):
+        self.settings = self._load()
+
+config = ConfigManager()
