@@ -1,31 +1,33 @@
-import logging
-from typing import Dict, Any
+import time
+import random
+from typing import Any, Dict
 
-class CryptoProcessor:
-    def __init__(self):
-        self.required_fields = {'tx_id': str, 'amount': (int, float), 'asset': str}
+class CryptoCircuitBreaker:
+    def __init__(self, limit: int = 3):
+        self.limit = limit
+        self.fails = 0
+        self.backoff = 1
 
-    def validate(self, packet: Dict[str, Any]) -> bool:
-        return all(isinstance(packet.get(k), v) for k, v in self.required_fields.items())
-
-    def run(self, stream: list):
-        for raw_entry in stream:
+    def execute(self, task, *args, **kwargs):
+        while self.fails < self.limit:
             try:
-                if not self.validate(raw_entry):
-                    raise ValueError(f"malformed packet: {raw_entry.get('tx_id')}")
-                
-                self._execute(raw_entry)
-            except (ValueError, TypeError) as e:
-                logging.error(f"discarding suspicious payload: {e}")
+                return task(*args, **kwargs)
+            except (ConnectionError, TimeoutError) as e:
+                self.fails += 1
+                wait = self.backoff * (2 ** self.fails) + random.uniform(0, 1)
+                time.sleep(wait)
+        raise Exception("Critical trade failure: exhausted retry threshold")
 
-    def _execute(self, data):
-        print(f"processing {data['asset']} transaction {data['tx_id']}")
+def process_trade(data: Dict[str, Any]) -> str:
+    if not data or 'amount' not in data:
+        raise ValueError("Malformed payload: missing transaction parameters")
+    if data['amount'] <= 0:
+        return "ignored: dust threshold"
+    return f"processed:{data['id']}"
 
-if __name__ == "__main__":
-    # simulation of automation-tool-56 flow
-    data_stream = [
-        {'tx_id': '0xabc', 'amount': 1.5, 'asset': 'BTC'},
-        {'tx_id': '0x123', 'amount': 'invalid', 'asset': 'ETH'}
-    ]
-    processor = CryptoProcessor()
-    processor.run(data_stream)
+def safe_execute(payload: Dict[str, Any]):
+    breaker = CryptoCircuitBreaker()
+    try:
+        return breaker.execute(process_trade, payload)
+    except Exception as e:
+        return {"status": "error", "reason": str(e), "timestamp": time.time()}
