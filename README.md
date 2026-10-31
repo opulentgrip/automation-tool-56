@@ -1,49 +1,43 @@
 # automation-tool-56
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-Automation-tool-56 is a high-performance Python framework designed for executing automated trading strategies across decentralized and centralized exchanges. It leverages asynchronous processing to ensure minimal latency for order execution in volatile crypto markets.
+A high-performance Python framework designed to automate liquidity provision and order execution across decentralized exchanges. It leverages asynchronous execution to minimize latency and maximize capital efficiency in volatile market conditions.
 
 ## Features
 
-*   **Multi-Exchange Support:** Native integration with Binance and Uniswap V3 APIs for cross-platform arbitrage opportunities.
-*   **Asynchronous Engine:** Utilizes `asyncio` and `aiohttp` to manage concurrent websocket streams and rapid-fire order placement.
-*   **Risk Management Guardrails:** Built-in circuit breakers and automated stop-loss triggers to protect capital during flash crashes.
-*   **Strategy Backtesting:** Includes a local CLI tool to test algorithmic logic against historical OHLCV data fetched from public APIs.
+*   **Multi-DEX Support:** Native integration for Uniswap V3 and PancakeSwap, with support for custom contract interactions via Web3.py.
+*   **Asynchronous Engine:** Utilizes `asyncio` for non-blocking websocket streaming of real-time price feeds and order book updates.
+*   **Risk Management Suite:** Configurable trailing stop-loss, take-profit triggers, and gas-fee optimization thresholds.
+*   **State Persistence:** Integrated SQLite logging to track historical trade performance and slippage metrics for strategy backtesting.
 
 ## Installation
 
-Ensure you have Python 3.10+ installed. Clone the repository and set up a virtual environment:
+Ensure you have Python 3.10+ installed. Clone the repository and install the dependencies:
 
 ```bash
 git clone https://github.com/Developer/automation-tool-56.git
 cd automation-tool-56
-python3 -m venv venv
-source venv/bin/activate
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Usage
+## Basic Usage
 
-To start the bot, provide your API credentials via a `.env` file and run the execution script with your preferred configuration file:
+Configure your environment variables in `.env` before initiating the bot. Run the execution engine using the following command:
 
 ```bash
-# Configure your credentials in .env first
-cp .env.example .env
-
-# Run a strategy
-python main.py --config configs/eth_usdt_scalp.yaml --mode live
+# Set your private key and RPC endpoint in .env first
+python main.py --strategy scalper --pair ETH-USDT --leverage 2
 ```
 
-### Configuration Example (`configs/eth_usdt_scalp.yaml`)
+To run the backtesting module on local data logs:
 
-```yaml
-symbol: "ETH/USDT"
-timeframe: "1m"
-trade_amount: 0.1
-stop_loss_pct: 0.02
-take_profit_pct: 0.05
+```bash
+python backtester.py --file logs/trade_history.db --format json
 ```
 
 ## License
-Distributed under the MIT License. See `LICENSE` for more information.
+
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
