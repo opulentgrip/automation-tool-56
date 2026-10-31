@@ -1,36 +1,37 @@
-import os
 import json
+import os
 from typing import Any, Dict
 
-DEFAULT_CONFIG = {
-    "rpc_url": "https://mainnet.infura.io",
-    "timeout": 30,
-    "retry_attempts": 3,
-    "gas_multiplier": 1.2
-}
+class CryptoConfig:
+    DEFAULT_SETTINGS = {
+        "api_key": "",
+        "base_url": "https://api.exchange.com",
+        "retry_limit": 3,
+        "wallet_mode": "read_only"
+    }
 
-class ConfigManager:
-    def __init__(self, path: str = "config.json"):
-        self.path = path
-        self.settings = self._load()
+    def __init__(self, config_path: str = "config.json"): 
+        self.path = config_path
+        self.settings = self._load_recursive(self.DEFAULT_SETTINGS)
 
-    def _load(self) -> Dict[str, Any]:
+    def _load_recursive(self, defaults: Dict[str, Any]) -> Dict[str, Any]:
         if not os.path.exists(self.path):
-            return DEFAULT_CONFIG
+            return defaults
+        
         try:
-            with open(self.path, "r") as f:
+            with open(self.path, 'r') as f:
                 user_data = json.load(f)
-                return {**DEFAULT_CONFIG, **user_data}
+            # Merge logic: overrides defaults with existing keys
+            return {**defaults, **user_data}
         except (json.JSONDecodeError, IOError):
-            return DEFAULT_CONFIG
-
-    def get(self, key: str, fallback: Any = None) -> Any:
-        return self.settings.get(key, fallback)
+            return defaults
 
     def __getitem__(self, key: str) -> Any:
         return self.settings[key]
 
-    def reload(self):
-        self.settings = self._load()
+    def __repr__(self) -> str:
+        return f"CryptoConfig({list(self.settings.keys())})"
 
-config = ConfigManager()
+# Usage pattern for automation-tool-56
+def get_active_config() -> CryptoConfig:
+    return CryptoConfig(os.getenv("APP_CONFIG_PATH", "config.json"))
