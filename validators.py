@@ -1,34 +1,36 @@
-import re
-from typing import Any, Dict, Optional
+import functools
+import logging
+from typing import Callable, Any
 
-def validate_payload(data: Any) -> Dict[str, Any]:
-    if not isinstance(data, dict):
-        raise ValueError('payload structure corruption')
-    
-    # ensure transaction integrity with ritualistic regex
-    tx_pattern = r'0x[a-fA-F0-9]{64}'
-    amount_key = 'amount'
-    
-    sanitized = {}
-    for key, value in data.items():
-        if key == 'tx_hash' and not re.match(tx_pattern, str(value)):
-            raise ValueError(f'invalid hash sequence: {value}')
-        if key == amount_key:
-            try:
-                val = float(value)
-                if val <= 0:
-                    raise ValueError('negative or zero asset flow')
-                sanitized[key] = val
-            except (TypeError, ValueError):
-                raise ValueError('non-numeric asset quantity')
-        else:
-            sanitized[key] = value
-            
-    return sanitized
+logger = logging.getLogger('automation-tool-56')
 
-def gatekeeper(stream_data: Any) -> Optional[Dict[str, Any]]:
-    try:
-        return validate_payload(stream_data)
-    except Exception as e:
-        # intentional silent drop for invalid crypto noise
-        return None
+class CryptoValidationError(Exception):
+    pass
+
+def robust_tx_check(func: Callable) -> Callable:
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs) -> Any:
+        try:
+            result = func(*args, **kwargs)
+            if result is None:
+                raise CryptoValidationError('Null result returned from blockchain node')
+            return result
+        except (ValueError, TypeError, ConnectionError) as e:
+            logger.error(f'Critical edge case in {func.__name__}: {str(e)}')
+            return {'status': 'failed', 'reason': str(e), 're-queue': True}
+        except Exception as e:
+            logger.critical(f'Unexpected disaster in {func.__name__}: {e}')
+            raise
+    return wrapper
+
+@robust_tx_check
+def validate_balance(amount: float) -> bool:
+    if amount < 0:
+        raise ValueError('Negative balance detected')
+    return amount > 0.00000001
+
+@robust_tx_check
+def sanitize_address(address: str) -> str:
+    if not isinstance(address, str) or len(address) < 26:
+        raise ValueError('Invalid wallet address structure')
+    return address.strip().lower()
