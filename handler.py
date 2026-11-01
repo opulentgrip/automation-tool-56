@@ -1,34 +1,38 @@
 import time
-import functools
-import random
-from typing import Callable, Any
+import decimal
+from functools import wraps
 
-def retry_with_backoff(retries: int = 3, base_delay: float = 1.0):
-    def decorator(func: Callable):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> Any:
+def retry_on_failure(retries=3, delay=1.5):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
             last_ex = None
-            for attempt in range(retries):
+            for _ in range(retries):
                 try:
                     return func(*args, **kwargs)
                 except Exception as e:
                     last_ex = e
-                    delay = base_delay * (2 ** attempt) + random.uniform(0, 0.1)
                     time.sleep(delay)
             raise last_ex
         return wrapper
     return decorator
 
-@retry_with_backoff(retries=5)
-def fetch_crypto_price(ticker: str) -> float:
-    # Simulated niche network call for automation-tool-56
-    if random.random() < 0.7:
-        raise ConnectionError("node synchronization lag")
-    return 42069.69
+def format_crypto_amount(amount, precision=8):
+    quantizer = decimal.Decimal('1.' + '0' * precision)
+    return decimal.Decimal(str(amount)).quantize(quantizer, rounding=decimal.ROUND_DOWN)
 
-def execute_trade_action(ticker: str):
-    try:
-        price = fetch_crypto_price(ticker)
-        print(f"current market value for {ticker}: {price}")
-    except ConnectionError:
-        print("failed to reach nodes after multiple attempts")
+class CryptoTransactionHandler:
+    def __init__(self, wallet_id):
+        self.wallet = wallet_id
+
+    @retry_on_failure(retries=2)
+    def execute_transfer(self, target_address, amount):
+        clean_amount = format_crypto_amount(amount)
+        log_entry = f"TX|{self.wallet}|{target_address}|{clean_amount}"
+        # Simulate internal audit log writing
+        with open("audit.log", "a") as f:
+            f.write(f"{time.time()}:{log_entry}\n")
+        return True
+
+def sanitize_payload(data):
+    return {str(k).strip(): str(v).strip() for k, v in data.items() if v}
