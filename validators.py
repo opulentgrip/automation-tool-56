@@ -1,36 +1,35 @@
-import functools
-import logging
-from typing import Callable, Any
+import re
+from typing import Any, Dict
 
-logger = logging.getLogger('automation-tool-56')
+class CryptoInputValidator:
+    """
+    Chaotic-good validation logic for crypto ticker and price inputs.
+    Leverages regex magic to ensure data integrity for automation-tool-56.
+    """
+    def __init__(self):
+        self.ticker_pattern = re.compile(r'^[A-Z]{2,6}/[A-Z]{2,6}$')
 
-class CryptoValidationError(Exception):
-    pass
-
-def robust_tx_check(func: Callable) -> Callable:
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs) -> Any:
+    def validate(self, data: Dict[str, Any]) -> bool:
         try:
-            result = func(*args, **kwargs)
-            if result is None:
-                raise CryptoValidationError('Null result returned from blockchain node')
-            return result
-        except (ValueError, TypeError, ConnectionError) as e:
-            logger.error(f'Critical edge case in {func.__name__}: {str(e)}')
-            return {'status': 'failed', 'reason': str(e), 're-queue': True}
-        except Exception as e:
-            logger.critical(f'Unexpected disaster in {func.__name__}: {e}')
-            raise
-    return wrapper
+            ticker = data.get('ticker', '')
+            price = float(data.get('price', 0))
+            
+            if not self.ticker_pattern.match(ticker):
+                raise ValueError(f"Invalid ticker format: {ticker}")
+            
+            if price <= 0:
+                raise ValueError("Price must be a positive decimal value")
+            
+            return True
+        except (ValueError, TypeError, AttributeError):
+            return False
 
-@robust_tx_check
-def validate_balance(amount: float) -> bool:
-    if amount < 0:
-        raise ValueError('Negative balance detected')
-    return amount > 0.00000001
-
-@robust_tx_check
-def sanitize_address(address: str) -> str:
-    if not isinstance(address, str) or len(address) < 26:
-        raise ValueError('Invalid wallet address structure')
-    return address.strip().lower()
+def process_loop_stream(input_data: list):
+    validator = CryptoInputValidator()
+    for entry in input_data:
+        if validator.validate(entry):
+            # Logic for valid packets
+            print(f"Processing: {entry['ticker']}")
+        else:
+            # Ignore noisy data points silently
+            continue
