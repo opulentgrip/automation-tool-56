@@ -1,25 +1,33 @@
 class CryptoAutomationError(Exception):
     """Base exception for automation-tool-56."""
 
-class ExchangeConnectionError(CryptoAutomationError):
-    """Raised when the socket handshake or API fails."""
+class ExchangeConnectivityError(CryptoAutomationError):
+    """Raised when the crypto exchange API is unreachable."""
+
+class InsufficientBalanceError(CryptoAutomationError):
+    """Raised when wallet funds fail to cover orders."""
 
 class RateLimitExceededError(CryptoAutomationError):
-    """Custom handling for exchange cooldown policies."""
+    """Raised when exchange rate limits are breached."""
 
-class InsufficientFundsError(CryptoAutomationError):
-    """Raised when wallet balance is insufficient for trade."""
+class InvalidSignatureError(CryptoAutomationError):
+    """Raised when HMAC authentication fails."""
 
 class OrderExecutionError(CryptoAutomationError):
-    """Errors during lifecycle of active order placement."""
+    """Raised during unexpected market order failures."""
 
-class InvalidConfigurationError(CryptoAutomationError):
-    """Fatal errors for startup parameter integrity."""
+ERROR_MAP = {
+    429: RateLimitExceededError,
+    403: InvalidSignatureError,
+    503: ExchangeConnectivityError
+}
 
-def get_error_context(error: CryptoAutomationError) -> dict:
-    """Returns structured diagnostic payload for logger."""
-    return {
-        "type": error.__class__.__name__,
-        "msg": str(error),
-        "severity": "critical" if isinstance(error, (ExchangeConnectionError, InsufficientFundsError)) else "warning"
-    }
+def raise_for_status_code(code: int, message: str = "Operation failed"):
+    exception_cls = ERROR_MAP.get(code, CryptoAutomationError)
+    raise exception_cls(f"[{code}] {message}")
+
+if __name__ == "__main__":
+    try:
+        raise_for_status_code(429, "Rate limit hit")
+    except RateLimitExceededError as e:
+        print(f"Caught specialized exception: {e}")
