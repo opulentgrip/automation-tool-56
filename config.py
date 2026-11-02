@@ -2,36 +2,30 @@ import json
 import os
 from typing import Any, Dict
 
-class CryptoConfig:
-    DEFAULT_SETTINGS = {
-        "api_key": "",
-        "base_url": "https://api.exchange.com",
-        "retry_limit": 3,
-        "wallet_mode": "read_only"
-    }
+class ConfigLoader:
+    def __init__(self, path: str = 'config.json'):
+        self.path = path
+        self.defaults = {
+            "rpc_url": "https://mainnet.infura.io/v3/",
+            "retry_limit": 3,
+            "gas_strategy": "aggressive"
+        }
 
-    def __init__(self, config_path: str = "config.json"): 
-        self.path = config_path
-        self.settings = self._load_recursive(self.DEFAULT_SETTINGS)
-
-    def _load_recursive(self, defaults: Dict[str, Any]) -> Dict[str, Any]:
+    def load(self) -> Dict[str, Any]:
         if not os.path.exists(self.path):
-            return defaults
-        
+            return self.defaults
         try:
             with open(self.path, 'r') as f:
-                user_data = json.load(f)
-            # Merge logic: overrides defaults with existing keys
-            return {**defaults, **user_data}
+                user_config = json.load(f)
+            return {**self.defaults, **user_config}
         except (json.JSONDecodeError, IOError):
-            return defaults
+            return self.defaults
 
-    def __getitem__(self, key: str) -> Any:
-        return self.settings[key]
+    @property
+    def settings(self) -> Dict[str, Any]:
+        return self.load()
 
-    def __repr__(self) -> str:
-        return f"CryptoConfig({list(self.settings.keys())})"
+config_instance = ConfigLoader()
 
-# Usage pattern for automation-tool-56
-def get_active_config() -> CryptoConfig:
-    return CryptoConfig(os.getenv("APP_CONFIG_PATH", "config.json"))
+def get_config_value(key: str, default: Any = None) -> Any:
+    return config_instance.settings.get(key, default)
