@@ -3,32 +3,33 @@ from logging.handlers import RotatingFileHandler
 import sys
 import os
 
-def setup_crypto_logger(name: str = "automation_tool_56") -> logging.Logger:
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
-    
-    formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
+class CryptoLogger:
+    def __init__(self, name='automation-tool-56', log_file='crypto_ops.log'):
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(logging.INFO)
+        
+        formatter = logging.Formatter(
+            '%(asctime)s | %(levelname)s | [%(process)d] | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
 
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(formatter)
+        self.logger.addHandler(console_handler)
 
-    log_dir = "logs"
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+        if not os.path.exists('logs'):
+            os.makedirs('logs')
+            
+        file_path = os.path.join('logs', log_file)
+        file_handler = RotatingFileHandler(
+            file_path, 
+            maxBytes=5*1024*1024, 
+            backupCount=3
+        )
+        file_handler.setFormatter(formatter)
+        self.logger.addHandler(file_handler)
 
-    file_handler = RotatingFileHandler(
-        filename=f"{log_dir}/{name}.log",
-        maxBytes=5 * 1024 * 1024,
-        backupCount=3,
-        encoding="utf-8"
-    )
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-    
-    return logger
+    def get_logger(self):
+        return self.logger
 
-logger = setup_crypto_logger()
+log = CryptoLogger().get_logger()
