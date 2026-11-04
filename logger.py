@@ -1,35 +1,31 @@
 import logging
-from logging.handlers import RotatingFileHandler
 import sys
-import os
+from typing import Any, Optional
 
 class CryptoLogger:
-    def __init__(self, name='automation-tool-56', log_file='crypto_ops.log'):
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.INFO)
-        
-        formatter = logging.Formatter(
-            '%(asctime)s | %(levelname)s | [%(process)d] | %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
+    """Custom logger for automation-tool-56 crypto operations."""
+
+    def __init__(self, name: str = "crypto_bot") -> None:
+        self._logger: logging.Logger = logging.getLogger(name)
+        self._logger.setLevel(logging.DEBUG)
+        handler: logging.StreamHandler = logging.StreamHandler(sys.stdout)
+        formatter: logging.Formatter = logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(message)s"
         )
+        handler.setFormatter(formatter)
+        self._logger.addHandler(handler)
 
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setFormatter(formatter)
-        self.logger.addHandler(console_handler)
+    def log_trade(self, symbol: str, amount: float, price: float) -> None:
+        """Formats and outputs trade execution details to stdout."""
+        self._logger.info(f"EXECUTE: {symbol} @ {price} | Vol: {amount}")
 
-        if not os.path.exists('logs'):
-            os.makedirs('logs')
-            
-        file_path = os.path.join('logs', log_file)
-        file_handler = RotatingFileHandler(
-            file_path, 
-            maxBytes=5*1024*1024, 
-            backupCount=3
-        )
-        file_handler.setFormatter(formatter)
-        self.logger.addHandler(file_handler)
+    def alert_anomaly(self, msg: str, code: Optional[int] = None) -> None:
+        """Dispatches critical crypto price anomaly warnings."""
+        tag: str = f"[CODE:{code}]" if code else ""
+        self._logger.warning(f"ANOMALY DETECTED {tag}: {msg}")
 
-    def get_logger(self):
-        return self.logger
+    def __call__(self, msg: Any) -> None:
+        """Syntactic sugar for quick diagnostic logging."""
+        self._logger.debug(f"DEBUG: {str(msg)}")
 
-log = CryptoLogger().get_logger()
+logger: CryptoLogger = CryptoLogger()
