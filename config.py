@@ -1,34 +1,35 @@
 import json
 import os
-from pathlib import Path
 from typing import Any, Dict
 
-class ConfigLoader:
-    DEFAULT_SETTINGS = {
-        "rpc_url": "https://mainnet.infura.io/v3/",
-        "retry_limit": 3,
-        "wallet_path": "./wallets",
-        "fee_multiplier": 1.2
-    }
+class CryptoConfig:
+    def __init__(self, file_path: str = "config.json"):
+        self.path = file_path
+        self.defaults = {
+            "api_key": "",
+            "secret": "",
+            "leverage": 5,
+            "base_asset": "BTC",
+            "rpc_url": "https://mainnet.infura.io/v3/"
+        }
+        self.data = self._load_and_merge()
 
-    def __init__(self, config_path: str = "config.json"):
-        self.path = Path(config_path)
-        self._config = self._load()
-
-    def _load(self) -> Dict[str, Any]:
-        if not self.path.exists():
-            with open(self.path, "w") as f:
-                json.dump(self.DEFAULT_SETTINGS, f, indent=4)
-            return self.DEFAULT_SETTINGS
+    def _load_and_merge(self) -> Dict[str, Any]:
+        if not os.path.exists(self.path):
+            return self.defaults
         
-        with open(self.path, "r") as f:
-            data = json.load(f)
-            return {**self.DEFAULT_SETTINGS, **data}
+        try:
+            with open(self.path, "r") as f:
+                user_config = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return self.defaults
 
-    def get(self, key: str, fallback: Any = None) -> Any:
-        return self._config.get(key, fallback)
+        return {**self.defaults, **user_config}
 
     def __getattr__(self, name: str) -> Any:
-        if name in self._config:
-            return self._config[name]
-        raise AttributeError(f"config key '{name}' missing")
+        return self.data.get(name, self.defaults.get(name))
+
+    def __repr__(self) -> str:
+        return f"CryptoConfig(keys={list(self.data.keys())})"
+
+cfg = CryptoConfig()
