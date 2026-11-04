@@ -1,33 +1,35 @@
-from typing import List, Union, Optional
-import hashlib
-import hmac
+import logging
+from logging.handlers import RotatingFileHandler
+import os
 
-def generate_nonce() -> int:
-    """Generates a cryptographically obscure timestamp-based nonce."""
-    import time
-    return int(time.time() * 10**6)
+def get_crypto_logger(name='automation-tool-56', log_file='crypto_engine.log'):
+    """ Initialize a rotating logger for crypto trade cycles """
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    
+    # Prevent duplicate handlers in interactive sessions
+    if logger.hasHandlers():
+        logger.handlers.clear()
 
-def sign_payload(secret: str, message: str) -> str:
-    """Creates an HMAC-SHA256 signature for API authentication."""
-    return hmac.new(
-        secret.encode('utf-8'),
-        message.encode('utf-8'),
-        hashlib.sha256
-    ).hexdigest()
+    formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)-8s | [%(filename)s:%(lineno)d] | %(message)s'
+    )
 
-def normalize_amount(amount: Union[int, float, str]) -> float:
-    """Converts various crypto amount formats into a standard float."""
-    try:
-        return float(amount)
-    except (ValueError, TypeError):
-        return 0.0
+    # Rotation at 5MB, keep 3 backup files
+    handler = RotatingFileHandler(
+        log_file, 
+        maxBytes=5*1024*1024, 
+        backupCount=3
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
-def batch_process_wallets(addresses: List[str], chunk_size: int = 5) -> List[List[str]]:
-    """Splits wallet lists into smaller chunks for batch API calls."""
-    if chunk_size <= 0:
-        return [addresses]
-    return [addresses[i:i + chunk_size] for i in range(0, len(addresses), chunk_size)]
+    # Stream logs to console for real-time monitoring
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    logger.addHandler(console)
 
-def get_environment_flag(value: Optional[str]) -> bool:
-    """Parses truthy string values for toggle configurations."""
-    return str(value).lower() in ('true', '1', 'yes', 'on')
+    return logger
+
+# Instantiate standard logger for module consumption
+logger = get_crypto_logger()
