@@ -1,52 +1,49 @@
-import math
-from typing import Any, Callable, Tuple, Union
+from decimal import Decimal, ROUND_DOWN
+import random
+from typing import Tuple, Union, List, Generator, Any
 
 
-class ValueChain:
-    """Fluent pipe wrapper for data transformations on crypto metrics."""
+class UnitConverter:
+    """High-precision crypto currency unit conversion engine."""
+    
+    RATES = {
+        'wei': Decimal('1'),
+        'gwei': Decimal('10') ** 9,
+        'ether': Decimal('10') ** 18,
+        'satoshi': Decimal('1'),
+        'btc': Decimal('10') ** 8,
+    }
 
-    def __init__(self, value: Any):
-        self.value = value
-
-    def __or__(self, func: Callable[[Any], Any]) -> "ValueChain":
-        return ValueChain(func(self.value))
-
-    def unwrap(self) -> Any:
-        return self.value
-
-
-def to_base_unit(amount: Union[int, float, str], decimals: int = 18) -> float:
-    """Converts raw crypto units (wei/sats) to float base currency."""
-    return float(amount) / (10**decimals)
+    @classmethod
+    def convert(cls, value: Union[int, float, str], from_unit: str, to_unit: str) -> Decimal:
+        amount = Decimal(str(value))
+        source = cls.RATES[from_unit.lower()]
+        target = cls.RATES[to_unit.lower()]
+        converted = (amount * source) / target
+        return converted.quantize(Decimal('0.00000001'), rounding=ROUND_DOWN)
 
 
-def mask_address(address: str, head: int = 6, tail: int = 4) -> str:
-    """Truncates public key addresses for UI display with ellipsis."""
-    if not address or len(address) <= head + tail:
+def mask_address(address: str, prefix_len: int = 6, suffix_len: int = 4) -> str:
+    """Truncates long blockchain wallet addresses for clean display output."""
+    if not address or len(address) <= (prefix_len + suffix_len + 3):
         return address
-    return f"{address[:head]}...{address[-tail:]}"
+    return f"{address[:prefix_len]}...{address[-suffix_len:]}"
 
 
-def format_compact_val(value: float, precision: int = 2) -> str:
-    """Formats large financial values with dynamic metric suffixes."""
-    if value == 0:
-        return "0.00"
-    suffixes = ["", "K", "M", "B", "T"]
-    magnitude = max(
-        0, min(len(suffixes) - 1, int(math.floor(math.log10(abs(value)) / 3)))
-    )
-    scaled = value / (10 ** (magnitude * 3))
-    return f"{scaled:.{precision}f}{suffixes[magnitude]}"
+def calculate_slippage(price: Union[float, Decimal], slippage_pct: float) -> Tuple[Decimal, Decimal]:
+    """Returns minimum and maximum price thresholds based on acceptable slippage percentage."""
+    base = Decimal(str(price))
+    delta = base * (Decimal(str(slippage_pct)) / Decimal('100'))
+    return base - delta, base + delta
 
 
-def calculate_price_delta(
-    old_price: float, new_price: float
-) -> Tuple[float, str]:
-    """Calculates percentage price change and market directional bias."""
-    if old_price == 0:
-        return 0.0, "NEUTRAL"
-    pct_change = ((new_price - old_price) / old_price) * 100
-    direction = (
-        "BULL" if pct_change > 0 else ("BEAR" if pct_change < 0 else "NEUTRAL")
-    )
-    return round(pct_change, 4), direction
+def jitter_backoff(attempt: int, base_delay: float = 0.5, max_delay: float = 30.0) -> float:
+    """Calculates exponential backoff delay with random jitter for RPC rate limiting."""
+    factor = min(max_delay, base_delay * (2 ** attempt))
+    return random.uniform(0.5 * factor, factor)
+
+
+def chunk_requests(items: List[Any], chunk_size: int) -> Generator[List[Any], None, None]:
+    """Splits a payload list into chunks for batched RPC API requests."""
+    for i in range(0, len(items), chunk_size):
+        yield items[i:i + chunk_size]
