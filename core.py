@@ -1,57 +1,34 @@
-import struct
-from typing import Dict, Any
+from typing import Dict, List, Optional, Union
+from decimal import Decimal
 
-class FastTickAggregator:
-    """High-throughput tick buffer with zero-allocation VWAP calculation."""
-    __slots__ = ('_buffer', '_size', '_head', '_count', '_volume_sum', '_pv_sum')
+class CryptoEngine:
+    """Engine for executing high-frequency arbitrage logic."""
 
-    def __init__(self, capacity: int = 1000) -> None:
-        self._size = capacity
-        self._buffer = bytearray(capacity * 24)
-        self._head = 0
-        self._count = 0
-        self._volume_sum = 0.0
-        self._pv_sum = 0.0
+    def __init__(self, wallet_id: str, threshold: float = 0.005) -> None:
+        self.wallet_id: str = wallet_id
+        self.threshold: Decimal = Decimal(str(threshold))
+        self.ledger: Dict[str, List[Decimal]] = {}
 
-    def push(self, price: float, volume: float, timestamp_ms: int) -> None:
-        offset = self._head * 24
-        if self._count == self._size:
-            old_price, old_vol, _ = struct.unpack_from('<ddQ', self._buffer, offset)
-            self._volume_sum -= old_vol
-            self._pv_sum -= old_price * old_vol
-        else:
-            self._count += 1
+    def track_asset(self, symbol: str, price: Union[int, float, Decimal]) -> None:
+        """Registers new price point into the internal volatility ledger."""
+        p_val = Decimal(str(price))
+        if symbol not in self.ledger:
+            self.ledger[symbol] = []
+        self.ledger[symbol].append(p_val)
 
-        struct.pack_into('<ddQ', self._buffer, offset, price, volume, timestamp_ms)
-        self._volume_sum += volume
-        self._pv_sum += price * volume
-        self._head = (self._head + 1) % self._size
+    def analyze_spread(self, symbol: str) -> Optional[Decimal]:
+        """Calculates spread deviation using a simplistic sliding window approach."""
+        prices = self.ledger.get(symbol, [])
+        if len(prices) < 2:
+            return None
+        
+        diff = abs(prices[-1] - prices[-2])
+        return diff if diff > self.threshold else Decimal('0')
 
-    def calculate_vwap(self) -> float:
-        if self._volume_sum == 0.0 or self._count == 0:
-            return 0.0
-        return self._pv_sum / self._volume_sum
-
-    def get_batch_stats(self) -> Dict[str, float]:
-        if self._count == 0:
-            return {'vwap': 0.0, 'min': 0.0, 'max': 0.0, 'volume': 0.0}
-
-        mv = memoryview(self._buffer)
-        prices = []
-        for i in range(self._count):
-            idx = (self._head - self._count + i) % self._size
-            p, _, _ = struct.unpack_from('<ddQ', mv, idx * 24)
-            prices.append(p)
-
-        return {
-            'vwap': self.calculate_vwap(),
-            'min': min(prices),
-            'max': max(prices),
-            'volume': self._volume_sum
-        }
-
-    def clear(self) -> None:
-        self._head = 0
-        self._count = 0
-        self._volume_sum = 0.0
-        self._pv_sum = 0.0
+    def execute_arbitrage(self, symbol: str) -> bool:
+        """Triggers trade execution if spread meets threshold criteria."""
+        spread = self.analyze_spread(symbol)
+        if spread and spread > self.threshold:
+            print(f"Executing trade for {symbol} at {spread} diff")
+            return True
+        return False
