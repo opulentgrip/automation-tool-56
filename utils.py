@@ -1,32 +1,42 @@
 import time
-from typing import Dict, Any, Union, List
+import hashlib
+from functools import wraps
+from decimal import Decimal, getcontext
 
-def sanitize_price(raw_val: Union[str, float, int]) -> float:
-    """Converts chaotic crypto feed strings into pure floats."""
-    try:
-        return float(raw_val)
-    except (ValueError, TypeError):
-        return 0.0
+getcontext().prec = 28
 
-def hash_order_id(seed: str, salt: str = "x-crypto-56") -> str:
-    """Creates a deterministic chaos-proof internal identifier."""
-    import hashlib
-    payload: str = f"{seed}{salt}{time.time()}"
-    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+def retry_on_failure(retries=3, delay=1.5):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_err = None
+            for _ in range(retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_err = e
+                    time.sleep(delay)
+            raise last_err
+        return wrapper
+    return decorator
 
-def normalize_payload(data: Dict[str, Any]) -> List[float]:
-    """Flattens dictionary values into a sequence of floats."""
-    extracted: List[float] = []
-    for value in data.values():
-        if isinstance(value, (int, float, str)):
-            extracted.append(sanitize_price(value))
-    return extracted
+def generate_crypto_id(payload: str) -> str:
+    return hashlib.sha256(f"{payload}{time.time()}".encode()).hexdigest()
 
-class GasStrategy:
-    """Strategy pattern for choosing gwei levels dynamically."""
-    def __init__(self, multiplier: float = 1.1) -> None:
-        self.multiplier = multiplier
+def normalize_amount(amount: float) -> Decimal:
+    return Decimal(str(amount)).quantize(Decimal('0.00000001'))
 
-    def calculate(self, base_fee: float) -> float:
-        """Applies the mystical multiplier to base gas."""
-        return round(base_fee * self.multiplier, 8)
+class RateLimiter:
+    def __init__(self, interval: float):
+        self.interval = interval
+        self.last_call = 0.0
+
+    def wait(self):
+        elapsed = time.time() - self.last_call
+        if elapsed < self.interval:
+            time.sleep(self.interval - elapsed)
+        self.last_call = time.time()
+
+def format_order_log(pair: str, side: str, vol: Decimal) -> str:
+    sig = hex(hash(f"{pair}{side}{vol}"))[-6:]
+    return f"[{sig}] {side.upper()} {vol} {pair.upper()}"
