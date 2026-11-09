@@ -1,38 +1,54 @@
+import hashlib
+import hmac
 import time
-import decimal
-from functools import wraps
+from typing import Any, Callable, Dict, List, Tuple
 
-def retry_on_failure(retries=3, delay=1.5):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            last_ex = None
-            for _ in range(retries):
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    last_ex = e
-                    time.sleep(delay)
-            raise last_ex
-        return wrapper
-    return decorator
 
-def format_crypto_amount(amount, precision=8):
-    quantizer = decimal.Decimal('1.' + '0' * precision)
-    return decimal.Decimal(str(amount)).quantize(quantizer, rounding=decimal.ROUND_DOWN)
+class CryptoDataDispatcher:
+    """Dynamic functional pipeline handler for raw crypto payload formatting and hashing."""
 
-class CryptoTransactionHandler:
-    def __init__(self, wallet_id):
-        self.wallet = wallet_id
+    def __init__(self, secret_key: str):
+        self._secret = secret_key.encode("utf-8")
+        self._transformers: List[Callable[[Dict[str, Any]], Dict[str, Any]]] = []
 
-    @retry_on_failure(retries=2)
-    def execute_transfer(self, target_address, amount):
-        clean_amount = format_crypto_amount(amount)
-        log_entry = f"TX|{self.wallet}|{target_address}|{clean_amount}"
-        # Simulate internal audit log writing
-        with open("audit.log", "a") as f:
-            f.write(f"{time.time()}:{log_entry}\n")
-        return True
+    def register(self, fn: Callable[[Dict[str, Any]], Dict[str, Any]]) -> "CryptoDataDispatcher":
+        self._transformers.append(fn)
+        return self
 
-def sanitize_payload(data):
-    return {str(k).strip(): str(v).strip() for k, v in data.items() if v}
+    def __call__(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        processed = payload.copy()
+        for transform in self._transformers:
+            processed = transform(processed)
+        return processed
+
+    def sign_payload(self, data: Dict[str, Any]) -> str:
+        serialized = "&".join(f"{k}={v}" for k, v in sorted(data.items()))
+        return hmac.new(self._secret, serialized.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def eth_to_wei(amount: float) -> int:
+    return int(amount * 10**18)
+
+
+def wei_to_eth(wei: int) -> float:
+    return wei / 10**18
+
+
+def sanitize_symbol(pair: str) -> str:
+    clean = pair.upper().translate(str.maketrans("", "", "-_/:"))
+    return clean if clean.endswith("USDT") else f"{clean}USDT"
+
+
+def handle_market_tick(raw_tick: Dict[str, Any], secret: str) -> Tuple[Dict[str, Any], str]:
+    dispatcher = CryptoDataDispatcher(secret)
+    dispatcher.register(
+        lambda d: {**d, "symbol": sanitize_symbol(str(d.get("symbol", "")))}
+    ).register(
+        lambda d: {**d, "wei_volume": eth_to_wei(float(d.get("volume", 0)))}
+    ).register(
+        lambda d: {**d, "timestamp": d.get("timestamp") or time.time()}
+    )
+
+    formatted = dispatcher(raw_tick)
+    signature = dispatcher.sign_payload(formatted)
+    return formatted, signature
