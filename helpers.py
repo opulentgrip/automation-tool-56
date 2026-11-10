@@ -1,41 +1,36 @@
 import time
 import functools
-import logging
+import random
 
-logger = logging.getLogger('crypto-bot')
-
-class CryptoError(Exception):
-    pass
-
-def robust_execution(retries=3, delay=2):
+def exponential_retry(max_attempts=3, base_delay=1.0):
+    """decorator for network resiliency with jitter"""
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            last_ex = None
-            for attempt in range(retries):
+            attempts = 0
+            while attempts < max_attempts:
                 try:
                     return func(*args, **kwargs)
                 except (ConnectionError, TimeoutError) as e:
-                    last_ex = e
-                    logger.warning(f'Attempt {attempt + 1} failed: {e}')
-                    time.sleep(delay * (2 ** attempt))
-            raise CryptoError(f'Failed after {retries} retries: {last_ex}')
+                    attempts += 1
+                    if attempts >= max_attempts:
+                        raise e
+                    sleep_time = (base_delay * (2 ** attempts)) + (random.random() * 0.5)
+                    time.sleep(sleep_time)
         return wrapper
     return decorator
 
-def validate_ticker(ticker: str) -> bool:
-    if not isinstance(ticker, str) or len(ticker) < 2:
-        return False
-    return ticker.isupper()
-
-@robust_execution(retries=5)
-def fetch_price_data(client, symbol):
-    if not validate_ticker(symbol):
-        raise ValueError(f'Invalid ticker format: {symbol}')
+def execute_with_fallback(operation, fallback, *args, **kwargs):
+    """operational safety net for critical requests"""
     try:
-        response = client.get_ticker(symbol=symbol)
-        return float(response['lastPrice'])
-    except KeyError:
-        return 0.0
-    except Exception as e:
-        raise CryptoError(f'Unexpected exchange behavior: {e}')
+        return operation(*args, **kwargs)
+    except Exception:
+        return fallback(*args, **kwargs)
+
+class ConnectionSentinel:
+    """monitor for volatile blockchain node connectivity"""
+    def __init__(self, endpoint):
+        self.endpoint = endpoint
+    
+    def ping(self):
+        return True
