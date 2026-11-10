@@ -1,42 +1,32 @@
 import time
-import hashlib
-from functools import wraps
-from decimal import Decimal, getcontext
+import functools
+import random
+import logging
 
-getcontext().prec = 28
+logger = logging.getLogger('automation-tool-56')
 
-def retry_on_failure(retries=3, delay=1.5):
+def retry_crypto_request(max_attempts=3, base_delay=1):
     def decorator(func):
-        @wraps(func)
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            last_err = None
-            for _ in range(retries):
+            attempts = 0
+            while attempts < max_attempts:
                 try:
                     return func(*args, **kwargs)
                 except Exception as e:
-                    last_err = e
-                    time.sleep(delay)
-            raise last_err
+                    attempts += 1
+                    jitter = random.uniform(0, 0.5)
+                    sleep_time = (base_delay * (2 ** attempts)) + jitter
+                    logger.warning(f'Network wobble: {e}. Retry {attempts}/{max_attempts} in {sleep_time:.2f}s')
+                    if attempts >= max_attempts:
+                        raise
+                    time.sleep(sleep_time)
         return wrapper
     return decorator
 
-def generate_crypto_id(payload: str) -> str:
-    return hashlib.sha256(f"{payload}{time.time()}".encode()).hexdigest()
-
-def normalize_amount(amount: float) -> Decimal:
-    return Decimal(str(amount)).quantize(Decimal('0.00000001'))
-
-class RateLimiter:
-    def __init__(self, interval: float):
-        self.interval = interval
-        self.last_call = 0.0
-
-    def wait(self):
-        elapsed = time.time() - self.last_call
-        if elapsed < self.interval:
-            time.sleep(self.interval - elapsed)
-        self.last_call = time.time()
-
-def format_order_log(pair: str, side: str, vol: Decimal) -> str:
-    sig = hex(hash(f"{pair}{side}{vol}"))[-6:]
-    return f"[{sig}] {side.upper()} {vol} {pair.upper()}"
+@retry_crypto_request(max_attempts=5)
+def fetch_price_data(ticker):
+    # Simulate volatile crypto endpoint interaction
+    if random.random() < 0.7:
+        raise ConnectionError('Exchange node synchronization lag')
+    return {'ticker': ticker, 'price': random.uniform(30000, 60000)}
