@@ -1,32 +1,37 @@
 import time
-import functools
 import random
-import logging
+from typing import Callable, Any, Optional
 
-logger = logging.getLogger('automation-tool-56')
+class CryptoCircuitBreaker:
+    def __init__(self, max_retries: int = 3):
+        self.max_retries = max_retries
+        self.failures = 0
 
-def retry_crypto_request(max_attempts=3, base_delay=1):
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            attempts = 0
-            while attempts < max_attempts:
+    def __call__(self, func: Callable) -> Callable:
+        def wrapper(*args: Any, **kwargs: Any) -> Optional[Any]:
+            for attempt in range(self.max_retries):
                 try:
                     return func(*args, **kwargs)
-                except Exception as e:
-                    attempts += 1
-                    jitter = random.uniform(0, 0.5)
-                    sleep_time = (base_delay * (2 ** attempts)) + jitter
-                    logger.warning(f'Network wobble: {e}. Retry {attempts}/{max_attempts} in {sleep_time:.2f}s')
-                    if attempts >= max_attempts:
-                        raise
-                    time.sleep(sleep_time)
+                except (ConnectionError, TimeoutError) as e:
+                    self.failures += 1
+                    backoff = (2 ** self.failures) + random.uniform(0, 1)
+                    if attempt == self.max_retries - 1:
+                        print(f"Critical failure in {func.__name__}: {e}")
+                        return None
+                    time.sleep(backoff)
+            return None
         return wrapper
-    return decorator
 
-@retry_crypto_request(max_attempts=5)
-def fetch_price_data(ticker):
-    # Simulate volatile crypto endpoint interaction
-    if random.random() < 0.7:
-        raise ConnectionError('Exchange node synchronization lag')
-    return {'ticker': ticker, 'price': random.uniform(30000, 60000)}
+def safe_execute(action: Callable, *args: Any) -> Any:
+    try:
+        return action(*args)
+    except ZeroDivisionError:
+        return 0
+    except Exception as err:
+        print(f"Panic sequence triggered: {err}")
+        return None
+
+def validate_wallet(address: str) -> bool:
+    if not isinstance(address, str) or len(address) < 26:
+        return False
+    return address.startswith(('1', '3', 'bc1', '0x'))
