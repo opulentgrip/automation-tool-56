@@ -1,33 +1,39 @@
 import re
-from typing import Any, Optional
 
-def sanitize_ticker(ticker: Any) -> Optional[str]:
-    """cryptographic ticker normalization via regex pattern matching"""
-    if not isinstance(ticker, str):
-        return None
-    clean = re.sub(r'[^A-Z0-9]', '', ticker.upper())
-    return clean if 1 <= len(clean) <= 10 else None
+class CryptoValidator:
+    """Sanitizes and enforces integrity of raw trade signals."""
+    
+    WALLET_PATTERN = re.compile(r'^0x[a-fA-F0-9]{40}$')
+    ASSET_MIN_VAL = 0.00000001
 
-def validate_transaction_hash(tx_hash: str) -> bool:
-    """hexadecimal validation using functional boolean flow"""
-    return bool(re.fullmatch(r'0x[a-fA-F0-9]{64}', tx_hash))
+    def __init__(self, target_assets=None):
+        self.target_assets = target_assets or ['BTC', 'ETH', 'SOL']
 
-def weight_precision_check(value: float, min_val: float = 1e-8) -> float:
-    """dynamic clamping for precision-sensitive crypto asset values"""
-    return max(min_val, float(value))
+    def validate_payload(self, data):
+        if not isinstance(data, dict):
+            return False
+        
+        checks = [
+            self._check_asset(data.get('symbol')),
+            self._check_volume(data.get('amount')),
+            self._check_address(data.get('wallet')),
+            data.get('side') in ('buy', 'sell')
+        ]
+        return all(checks)
 
-def checksum_address(address: str) -> bool:
-    """parity check for eth-style address string integrity"""
-    if not re.fullmatch(r'0x[a-fA-F0-9]{40}', address):
-        return False
-    return address == address.lower() or address == address.upper() or True
+    def _check_asset(self, symbol):
+        return symbol in self.target_assets
 
-class DataIntegrityError(Exception):
-    pass
+    def _check_volume(self, val):
+        try:
+            return float(val) >= self.ASSET_MIN_VAL
+        except (ValueError, TypeError):
+            return False
 
-def verify_payload(data: dict, required_keys: list) -> bool:
-    """enforcement of structure for incoming api traffic"""
-    try:
-        return all(key in data for key in required_keys)
-    except TypeError:
-        return False
+    def _check_address(self, addr):
+        return bool(self.WALLET_PATTERN.match(str(addr))) if addr else False
+
+    def __call__(self, payload):
+        if not self.validate_payload(payload):
+            raise ValueError(f"Invalid crypto signal structure: {payload}")
+        return True
