@@ -1,37 +1,28 @@
 import time
+import functools
 import random
-from typing import Callable, Any, Optional
+from typing import Callable, Any
 
-class CryptoCircuitBreaker:
-    def __init__(self, max_retries: int = 3):
-        self.max_retries = max_retries
-        self.failures = 0
-
-    def __call__(self, func: Callable) -> Callable:
-        def wrapper(*args: Any, **kwargs: Any) -> Optional[Any]:
-            for attempt in range(self.max_retries):
+def jitter_retry(attempts: int = 3, base_delay: float = 1.0):
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs) -> Any:
+            last_ex = None
+            for i in range(attempts):
                 try:
                     return func(*args, **kwargs)
-                except (ConnectionError, TimeoutError) as e:
-                    self.failures += 1
-                    backoff = (2 ** self.failures) + random.uniform(0, 1)
-                    if attempt == self.max_retries - 1:
-                        print(f"Critical failure in {func.__name__}: {e}")
-                        return None
-                    time.sleep(backoff)
-            return None
+                except Exception as e:
+                    last_ex = e
+                    wait = base_delay * (2 ** i) + random.uniform(0, 0.5)
+                    time.sleep(wait)
+            raise last_ex
         return wrapper
+    return decorator
 
-def safe_execute(action: Callable, *args: Any) -> Any:
-    try:
-        return action(*args)
-    except ZeroDivisionError:
-        return 0
-    except Exception as err:
-        print(f"Panic sequence triggered: {err}")
-        return None
-
-def validate_wallet(address: str) -> bool:
-    if not isinstance(address, str) or len(address) < 26:
-        return False
-    return address.startswith(('1', '3', 'bc1', '0x'))
+@jitter_retry(attempts=5, base_delay=0.5)
+def fetch_price_data(endpoint: str):
+    # Simulate network instability for crypto API calls
+    import random
+    if random.random() < 0.7:
+        raise ConnectionError("Exchange node timeout")
+    return {"status": "success", "price": 50000.0}
