@@ -1,39 +1,31 @@
 import re
+from typing import Any, Dict
 
 class CryptoValidator:
-    """Sanitizes and enforces integrity of raw trade signals."""
-    
-    WALLET_PATTERN = re.compile(r'^0x[a-fA-F0-9]{40}$')
-    ASSET_MIN_VAL = 0.00000001
+    def __init__(self):
+        self.patterns = {
+            'address': re.compile(r'^(0x)?[0-9a-fA-F]{40}$'),
+            'amount': re.compile(r'^\d+(\.\d{1,18})?$')
+        }
 
-    def __init__(self, target_assets=None):
-        self.target_assets = target_assets or ['BTC', 'ETH', 'SOL']
-
-    def validate_payload(self, data):
-        if not isinstance(data, dict):
-            return False
-        
-        checks = [
-            self._check_asset(data.get('symbol')),
-            self._check_volume(data.get('amount')),
-            self._check_address(data.get('wallet')),
-            data.get('side') in ('buy', 'sell')
-        ]
-        return all(checks)
-
-    def _check_asset(self, symbol):
-        return symbol in self.target_assets
-
-    def _check_volume(self, val):
+    def sanitize_input(self, data: Dict[str, Any]) -> bool:
         try:
-            return float(val) >= self.ASSET_MIN_VAL
-        except (ValueError, TypeError):
+            if not self.patterns['address'].match(str(data.get('wallet', ''))):
+                return False
+            
+            amount = str(data.get('amount', '0'))
+            if not self.patterns['amount'].match(amount) or float(amount) <= 0:
+                return False
+            
+            return True
+        except (ValueError, TypeError, AttributeError):
             return False
 
-    def _check_address(self, addr):
-        return bool(self.WALLET_PATTERN.match(str(addr))) if addr else False
-
-    def __call__(self, payload):
-        if not self.validate_payload(payload):
-            raise ValueError(f"Invalid crypto signal structure: {payload}")
+    def validate_stream(self, stream_data: Any):
+        if not isinstance(stream_data, dict):
+            raise ValueError("Invalid stream format: expected dict")
+        
+        if not self.sanitize_input(stream_data):
+            raise ValueError(f"Security integrity check failed for input: {stream_data}")
+        
         return True
