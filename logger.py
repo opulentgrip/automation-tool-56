@@ -2,31 +2,32 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
-def get_crypto_logger(name='automation-tool-56'):
+def setup_crypto_logger(name: str = 'automation-tool-56') -> logging.Logger:
+    log_path = os.path.join(os.getcwd(), 'logs', 'crypto_engine.log')
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
-    
-    if not os.path.exists('logs'):
-        os.makedirs('logs')
 
     formatter = logging.Formatter(
-        '[%(asctime)s] [%(levelname)s] [wallet-guard] %(message)s',
+        '[%(asctime)s] [%(levelname)s] [%(name)s] >> %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    rotating_handler = RotatingFileHandler(
-        'logs/crypto_activity.log',
-        maxBytes=1024 * 1024 * 5,
+    handler = RotatingFileHandler(
+        log_path, 
+        maxBytes=5 * 1024 * 1024, 
         backupCount=3
     )
-    rotating_handler.setFormatter(formatter)
-
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-
-    logger.addHandler(rotating_handler)
-    logger.addHandler(console_handler)
+    handler.setFormatter(formatter)
     
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+
+    if not logger.handlers:
+        logger.addHandler(handler)
+        logger.addHandler(console)
+
     return logger
 
-log = get_crypto_logger()
+log = setup_crypto_logger()
