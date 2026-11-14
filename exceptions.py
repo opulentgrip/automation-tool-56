@@ -1,33 +1,28 @@
+from typing import Optional, Any
+
 class CryptoAutomationError(Exception):
-    """Base exception for automation-tool-56."""
+    """Base exception for all automation-tool-56 operations."""
+    def __init__(self, message: str, code: Optional[int] = None) -> None:
+        self.code: Optional[int] = code
+        super().__init__(f"[{code}] {message}" if code else message)
 
 class ExchangeConnectivityError(CryptoAutomationError):
-    """Raised when the crypto exchange API is unreachable."""
+    """Raised when the target exchange API becomes unresponsive."""
+    pass
 
-class InsufficientBalanceError(CryptoAutomationError):
-    """Raised when wallet funds fail to cover orders."""
+class WalletBalanceInsufficiency(CryptoAutomationError):
+    """Raised when transaction requirements exceed available funds."""
+    def __init__(self, required: float, actual: float) -> None:
+        super().__init__(f"Insufficient funds: need {required}, have {actual}", 402)
 
-class RateLimitExceededError(CryptoAutomationError):
-    """Raised when exchange rate limits are breached."""
+class RateLimitExceeded(CryptoAutomationError):
+    """Raised upon hitting exchange tier limits."""
+    def __init__(self, retry_after: int) -> None:
+        super().__init__(f"Cooldown required for {retry_after} seconds", 429)
 
-class InvalidSignatureError(CryptoAutomationError):
-    """Raised when HMAC authentication fails."""
-
-class OrderExecutionError(CryptoAutomationError):
-    """Raised during unexpected market order failures."""
-
-ERROR_MAP = {
-    429: RateLimitExceededError,
-    403: InvalidSignatureError,
-    503: ExchangeConnectivityError
-}
-
-def raise_for_status_code(code: int, message: str = "Operation failed"):
-    exception_cls = ERROR_MAP.get(code, CryptoAutomationError)
-    raise exception_cls(f"[{code}] {message}")
-
-if __name__ == "__main__":
-    try:
-        raise_for_status_code(429, "Rate limit hit")
-    except RateLimitExceededError as e:
-        print(f"Caught specialized exception: {e}")
+def handle_critical_failure(error: CryptoAutomationError, context: Any = None) -> None:
+    """Logging wrapper for specialized crypto exception flows."""
+    error_msg = f"CRITICAL: {str(error)} | Context: {context}"
+    print(f"[!] {error_msg}")
+    if getattr(error, 'code', None) == 429:
+        print("Initiating emergency backoff sequence...")
