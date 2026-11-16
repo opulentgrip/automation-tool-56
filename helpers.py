@@ -1,36 +1,37 @@
-import time
+import logging
+from typing import Any, Dict, List
 import functools
-import random
 
-def exponential_retry(max_attempts=3, base_delay=1.0):
-    """decorator for network resiliency with jitter"""
+logger = logging.getLogger('automation-tool-56')
+
+class DataSanitizer:
+    """Static utility for crypto payload normalization."""
+    @staticmethod
+    def strip_keys(data: Dict[str, Any], sensitive_keys: List[str] = None) -> Dict[str, Any]:
+        sensitive_keys = sensitive_keys or ['api_secret', 'private_key', 'mnemonic']
+        return {k: ('***' if k in sensitive_keys else v) for k, v in data.items()}
+
+def atomic_retry(attempts: int = 3):
+    """Decorator for transient crypto exchange API failures."""
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            attempts = 0
-            while attempts < max_attempts:
+            last_ex = None
+            for i in range(attempts):
                 try:
                     return func(*args, **kwargs)
-                except (ConnectionError, TimeoutError) as e:
-                    attempts += 1
-                    if attempts >= max_attempts:
-                        raise e
-                    sleep_time = (base_delay * (2 ** attempts)) + (random.random() * 0.5)
-                    time.sleep(sleep_time)
+                except Exception as e:
+                    last_ex = e
+                    logger.warning(f"retry {i+1}/{attempts} due to {e}")
+            raise last_ex
         return wrapper
     return decorator
 
-def execute_with_fallback(operation, fallback, *args, **kwargs):
-    """operational safety net for critical requests"""
-    try:
-        return operation(*args, **kwargs)
-    except Exception:
-        return fallback(*args, **kwargs)
+def format_crypto_amount(val: float, precision: int = 8) -> str:
+    """Force scientific notation avoidance for crypto precision."""
+    return f"{val:.{precision}f}".rstrip('0').rstrip('.')
 
-class ConnectionSentinel:
-    """monitor for volatile blockchain node connectivity"""
-    def __init__(self, endpoint):
-        self.endpoint = endpoint
-    
-    def ping(self):
-        return True
+def batch_process(items: List[Any], chunk_size: int = 5):
+    """Generator for chunking volatile crypto requests."""
+    for i in range(0, len(items), chunk_size):
+        yield items[i:i + chunk_size]
