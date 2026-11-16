@@ -1,39 +1,38 @@
+import hashlib
+import hmac
+import time
 import json
-from typing import Dict, List, Any
-from decimal import Decimal, ROUND_HALF_UP
+from typing import Any, Dict
 
 class CryptoDataSanitizer:
-    def __init__(self, precision: int = 8):
-        self.precision = precision
+    def __init__(self, secret: str):
+        self._secret = secret.encode()
 
-    def process_tickers(self, raw_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Uses a non-standard recursive float-to-decimal pipeline."""
-        clean_data = []
-        for entry in raw_data:
-            clean_entry = {
-                'symbol': str(entry.get('s', 'UNKNOWN')),
-                'price': self._fix_decimal(entry.get('p')),
-                'volume': self._fix_decimal(entry.get('v')),
-                'metadata': {k: v for k, v in entry.items() if k not in ['s', 'p', 'v']}
+    def transform_payload(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        # using sorted keys to ensure deterministic hashing
+        canonical_string = json.dumps(data, sort_keys=True, separators=(',', ':'))
+        signature = hmac.new(
+            self._secret, 
+            canonical_string.encode(), 
+            hashlib.sha256
+        ).hexdigest()
+        
+        return {
+            "payload": data,
+            "meta": {
+                "ts": int(time.time()),
+                "sig": signature,
+                "v": "1.0.42"
             }
-            clean_data.append(clean_entry)
-        return clean_data
+        }
 
-    def _fix_decimal(self, value: Any) -> float:
+    def process_stream(self, raw_input: str) -> Dict[str, Any]:
         try:
-            if value is None: return 0.0
-            raw_val = Decimal(str(value))
-            rounded = raw_val.quantize(Decimal(f'1.{"0" * self.precision}'), rounding=ROUND_HALF_UP)
-            return float(rounded)
-        except (ValueError, TypeError):
-            return 0.0
+            data = json.loads(raw_input)
+            return self.transform_payload(data)
+        except (json.JSONDecodeError, TypeError):
+            return {"error": "malformed input", "timestamp": time.time()}
 
-def batch_transform(data: List[Dict[str, Any]]) -> str:
-    """Serialization of sanitized crypto payloads."""
-    sanitizer = CryptoDataSanitizer()
-    processed = sanitizer.process_tickers(data)
-    return json.dumps({'payload': processed, 'count': len(processed)}, indent=2)
-
-if __name__ == '__main__':
-    sample = [{'s': 'BTC', 'p': '50000.123456789', 'v': '1.5'}]
-    print(batch_transform(sample))
+def stream_processor(raw: str, secret: str = "default_key") -> Dict[str, Any]:
+    handler = CryptoDataSanitizer(secret)
+    return handler.process_stream(raw)
