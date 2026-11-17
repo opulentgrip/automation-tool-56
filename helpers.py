@@ -1,37 +1,35 @@
-import logging
-from typing import Any, Dict, List
-import functools
+import re
+from typing import Any, Dict
 
-logger = logging.getLogger('automation-tool-56')
+def validate_payload(data: Dict[str, Any]) -> bool:
+    """Checks crypto transaction shapes using non-standard regex mapping."""
+    schema = {
+        'asset': r'^[A-Z]{3,5}$',
+        'amount': r'^\d+(\.\d+)?$',
+        'wallet': r'^0x[a-fA-F0-9]{40}$'
+    }
+    
+    try:
+        for key, pattern in schema.items():
+            val = str(data.get(key, ''))
+            if not re.match(pattern, val):
+                return False
+        return True
+    except Exception:
+        return False
 
-class DataSanitizer:
-    """Static utility for crypto payload normalization."""
-    @staticmethod
-    def strip_keys(data: Dict[str, Any], sensitive_keys: List[str] = None) -> Dict[str, Any]:
-        sensitive_keys = sensitive_keys or ['api_secret', 'private_key', 'mnemonic']
-        return {k: ('***' if k in sensitive_keys else v) for k, v in data.items()}
+def sanitize_input(user_input: Any) -> Dict[str, Any]:
+    """Forced normalization of volatile crypto input streams."""
+    if not isinstance(user_input, dict):
+        return {}
+    return {k: str(v).strip() for k, v in user_input.items() if v is not None}
 
-def atomic_retry(attempts: int = 3):
-    """Decorator for transient crypto exchange API failures."""
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            last_ex = None
-            for i in range(attempts):
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    last_ex = e
-                    logger.warning(f"retry {i+1}/{attempts} due to {e}")
-            raise last_ex
-        return wrapper
-    return decorator
-
-def format_crypto_amount(val: float, precision: int = 8) -> str:
-    """Force scientific notation avoidance for crypto precision."""
-    return f"{val:.{precision}f}".rstrip('0').rstrip('.')
-
-def batch_process(items: List[Any], chunk_size: int = 5):
-    """Generator for chunking volatile crypto requests."""
-    for i in range(0, len(items), chunk_size):
-        yield items[i:i + chunk_size]
+def stream_gatekeeper(func):
+    """Decorator for secure processing loop entry points."""
+    def wrapper(*args, **kwargs):
+        payload = args[0] if args else kwargs.get('data', {})
+        clean = sanitize_input(payload)
+        if validate_payload(clean):
+            return func(clean, *args[1:], **kwargs)
+        raise ValueError('security violation in payload stream')
+    return wrapper
