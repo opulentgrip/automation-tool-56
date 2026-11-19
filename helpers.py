@@ -1,35 +1,39 @@
-import re
-from typing import Any, Dict
+import time
+import functools
+from decimal import Decimal
 
-def validate_payload(data: Dict[str, Any]) -> bool:
-    """Checks crypto transaction shapes using non-standard regex mapping."""
-    schema = {
-        'asset': r'^[A-Z]{3,5}$',
-        'amount': r'^\d+(\.\d+)?$',
-        'wallet': r'^0x[a-fA-F0-9]{40}$'
-    }
-    
-    try:
-        for key, pattern in schema.items():
-            val = str(data.get(key, ''))
-            if not re.match(pattern, val):
-                return False
-        return True
-    except Exception:
-        return False
+def retry_on_failure(retries=3, delay=1.5):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            last_ex = None
+            for i in range(retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_ex = e
+                    time.sleep(delay * (2 ** i))
+            raise last_ex
+        return wrapper
+    return decorator
 
-def sanitize_input(user_input: Any) -> Dict[str, Any]:
-    """Forced normalization of volatile crypto input streams."""
-    if not isinstance(user_input, dict):
-        return {}
-    return {k: str(v).strip() for k, v in user_input.items() if v is not None}
+def normalize_amount(value, precision=8):
+    return Decimal(str(value)).quantize(Decimal('1.' + '0' * precision))
 
-def stream_gatekeeper(func):
-    """Decorator for secure processing loop entry points."""
-    def wrapper(*args, **kwargs):
-        payload = args[0] if args else kwargs.get('data', {})
-        clean = sanitize_input(payload)
-        if validate_payload(clean):
-            return func(clean, *args[1:], **kwargs)
-        raise ValueError('security violation in payload stream')
-    return wrapper
+def format_trade_log(symbol, side, price, qty):
+    return f"[{symbol.upper()}] {side.upper()} @ {price} | VOL: {qty}"
+
+def crypto_throttle(limit_per_second):
+    interval = 1.0 / limit_per_second
+    def decorator(func):
+        last_called = [0.0]
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            elapsed = time.time() - last_called[0]
+            if elapsed < interval:
+                time.sleep(interval - elapsed)
+            result = func(*args, **kwargs)
+            last_called[0] = time.time()
+            return result
+        return wrapper
+    return decorator
