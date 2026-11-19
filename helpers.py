@@ -1,39 +1,46 @@
-import time
-import functools
-from decimal import Decimal
+import logging
+from typing import Any, Callable, Dict
+from functools import wraps
 
-def retry_on_failure(retries=3, delay=1.5):
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+logger = logging.getLogger('automation-tool-56')
+
+class CryptoCircuitBreaker:
+    def __init__(self, limit: int = 3):
+        self.failures = 0
+        self.limit = limit
+
+    def __call__(self, func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            if self.failures >= self.limit:
+                raise RuntimeError('circuit breaker trip: too many crypto errors')
+            try:
+                result = func(*args, **kwargs)
+                self.failures = 0
+                return result
+            except Exception as e:
+                self.failures += 1
+                logger.error(f'transaction attempt {self.failures} failed: {e}')
+                raise
+        return wrapper
+
+def sanitize_ticker(ticker: str) -> str:
+    return ticker.strip().upper().replace('/', '_')
+
+def format_gas_fee(wei: int) -> float:
+    return round(wei / 10**18, 8)
+
+def retry_on_timeout(attempts: int = 3) -> Callable:
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             last_ex = None
-            for i in range(retries):
+            for i in range(attempts):
                 try:
                     return func(*args, **kwargs)
-                except Exception as e:
+                except TimeoutError as e:
                     last_ex = e
-                    time.sleep(delay * (2 ** i))
+                    logger.warning(f'retry {i+1}/{attempts} for timeout')
             raise last_ex
-        return wrapper
-    return decorator
-
-def normalize_amount(value, precision=8):
-    return Decimal(str(value)).quantize(Decimal('1.' + '0' * precision))
-
-def format_trade_log(symbol, side, price, qty):
-    return f"[{symbol.upper()}] {side.upper()} @ {price} | VOL: {qty}"
-
-def crypto_throttle(limit_per_second):
-    interval = 1.0 / limit_per_second
-    def decorator(func):
-        last_called = [0.0]
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            elapsed = time.time() - last_called[0]
-            if elapsed < interval:
-                time.sleep(interval - elapsed)
-            result = func(*args, **kwargs)
-            last_called[0] = time.time()
-            return result
         return wrapper
     return decorator
