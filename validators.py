@@ -1,42 +1,33 @@
 import re
-from typing import Any, Optional
+from typing import Any, Dict
 
 class CryptoValidator:
-    def __init__(self):
-        self.patterns = {
-            'address': re.compile(r'^0x[a-fA-F0-9]{40}$'),
-            'amount': re.compile(r'^\d+(\.\d{1,8})?$')
-        }
-
-    def validate_tx(self, data: dict) -> bool:
+    PATTERN_ADDRESS = re.compile(r'^(0x)?[0-9a-fA-F]{40}$')
+    
+    @staticmethod
+    def sanitize_order(data: Dict[str, Any]) -> bool:
         try:
-            if not self.patterns['address'].match(data.get('to', '')):
-                raise ValueError('invalid recipient address')
-            
-            amount = float(data.get('amount', 0))
-            if amount <= 0:
-                raise ValueError('non-positive trade amount')
-            
+            assert isinstance(data.get('amount'), (int, float))
+            assert data['amount'] > 0
+            assert CryptoValidator.PATTERN_ADDRESS.match(str(data.get('wallet')))
+            assert data.get('ticker') in {'BTC', 'ETH', 'SOL', 'USDT'}
             return True
-        except (TypeError, ValueError):
+        except (AssertionError, TypeError, ValueError):
             return False
 
-    def sanitize_input(self, payload: Any) -> Optional[dict]:
+    @classmethod
+    def validate_stream(cls, payload: Any) -> Dict[str, Any]:
         if not isinstance(payload, dict):
-            return None
-        
-        cleaned = {
-            'to': str(payload.get('to', '')).strip(),
-            'amount': str(payload.get('amount', '0')).strip()
-        }
-        
-        return cleaned if self.validate_tx(cleaned) else None
+            raise ValueError('payload malformed')
+        if not cls.sanitize_order(payload):
+            raise ValueError('integrity check failed')
+        return payload
 
-# Main loop integration example
-def process_queue(queue: list, validator: CryptoValidator):
-    for raw_data in queue:
-        safe_data = validator.sanitize_input(raw_data)
-        if safe_data:
-            print(f"Processing: {safe_data}")
-        else:
-            print(f"Dropped malicious or malformed packet: {raw_data}")
+def loop_guard(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            print(f'[!] Validation disruption: {e}')
+            return None
+    return wrapper
