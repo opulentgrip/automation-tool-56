@@ -2,32 +2,31 @@ import re
 from typing import Any, Dict
 
 class CryptoValidator:
-    PATTERN_ADDRESS = re.compile(r'^(0x)?[0-9a-fA-F]{40}$')
-    
+    PATTERN_ADDRESS = re.compile(r'^0x[a-fA-F0-9]{40}$')
+    ALLOWED_ASSETS = {'BTC', 'ETH', 'SOL', 'MATIC'}
+
     @staticmethod
-    def sanitize_order(data: Dict[str, Any]) -> bool:
+    def sanitize_payload(payload: Dict[str, Any]) -> bool:
         try:
-            assert isinstance(data.get('amount'), (int, float))
-            assert data['amount'] > 0
-            assert CryptoValidator.PATTERN_ADDRESS.match(str(data.get('wallet')))
-            assert data.get('ticker') in {'BTC', 'ETH', 'SOL', 'USDT'}
+            amount = float(payload.get('amount', 0))
+            asset = payload.get('ticker', '').upper()
+            address = payload.get('wallet', '')
+
+            if amount <= 0:
+                raise ValueError('invalid amount')
+            if asset not in CryptoValidator.ALLOWED_ASSETS:
+                raise ValueError('unsupported asset')
+            if not CryptoValidator.PATTERN_ADDRESS.match(address):
+                raise ValueError('invalid wallet format')
+
             return True
-        except (AssertionError, TypeError, ValueError):
+        except (TypeError, ValueError):
             return False
 
-    @classmethod
-    def validate_stream(cls, payload: Any) -> Dict[str, Any]:
-        if not isinstance(payload, dict):
-            raise ValueError('payload malformed')
-        if not cls.sanitize_order(payload):
-            raise ValueError('integrity check failed')
-        return payload
-
-def loop_guard(func):
-    def wrapper(*args, **kwargs):
-        try:
+    @staticmethod
+    def loop_guard(func):
+        def wrapper(*args, **kwargs):
+            if not CryptoValidator.sanitize_payload(args[0]):
+                return {'status': 'error', 'reason': 'validation failure'}
             return func(*args, **kwargs)
-        except Exception as e:
-            print(f'[!] Validation disruption: {e}')
-            return None
-    return wrapper
+        return wrapper
