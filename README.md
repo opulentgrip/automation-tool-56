@@ -1,13 +1,13 @@
 # automation-tool-56
 
-`automation-tool-56` is a high-performance Python framework designed for asynchronous interaction with decentralized exchange (DEX) liquidity pools. It provides a robust, low-latency environment for executing automated arbitrage strategies and portfolio rebalancing across EVM-compatible networks.
+A high-performance Python framework designed for asynchronous crypto market analysis and automated trade execution. This tool leverages CCXT and WebSocket streams to provide low-latency interaction with major decentralized and centralized exchanges.
 
 ## Features
 
-*   **Async Execution Engine:** Built on `asyncio` and `aiohttp` to ensure non-blocking transaction broadcasting and real-time WebSocket stream processing.
-*   **Flash Loan Readiness:** Integrated helper modules for interacting with Aave and Uniswap V3 flash loan protocols to capitalize on cross-market price discrepancies.
-*   **Gas Optimization:** Smart gas estimation algorithms that dynamically adjust EIP-1559 fees based on current mempool congestion to minimize execution costs.
-*   **Secure Credential Management:** Encrypted local storage for private keys utilizing `eth-account` and environment-based configuration validation.
+*   **Asynchronous Order Execution:** Utilizes `asyncio` to manage multiple concurrent trade signals with minimal slippage.
+*   **Real-time Price Engine:** Continuous stream monitoring for BTC/ETH pairs with customizable threshold-based triggers.
+*   **Encrypted API Management:** Secure local storage for exchange credentials using environment-based AES-256 encryption.
+*   **Integrated Logger:** Automated reporting of trade history and performance metrics in structured CSV/JSON formats.
 
 ## Installation
 
@@ -16,30 +16,26 @@ Ensure you have Python 3.10+ installed. Clone the repository and install the dep
 ```bash
 git clone https://github.com/Developer/automation-tool-56.git
 cd automation-tool-56
-python3 -m venv venv
-source venv/bin/activate
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
 ## Basic Usage
 
-Configure your environment variables in `.env` with your RPC provider and private key, then initialize the bot:
+1. Configure your API keys in the `.env` file:
+   ```bash
+   EXCHANGE_API_KEY=your_key_here
+   EXCHANGE_SECRET=your_secret_here
+   ```
 
-```python
-from src.engine import TradeEngine
-
-# Initialize the engine with network config
-bot = TradeEngine(network="mainnet", strategy="arbitrage_v1")
-
-# Run the execution loop
-if __name__ == "__main__":
-    bot.start()
-```
-
-For detailed configuration regarding specific DEX pairs and slippage tolerance, consult the `config/strategies.yaml` file.
+2. Execute the primary strategy script to begin monitoring the markets:
+   ```bash
+   python main.py --symbol BTC/USDT --strategy breakout
+   ```
 
 ## License
 
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+*Disclaimer: This tool is for educational purposes only. Crypto trading involves significant risk of loss. Always test strategies in a sandbox/paper-trading environment before deploying real capital.*
