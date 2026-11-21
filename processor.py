@@ -1,37 +1,40 @@
-import time
-import logging
+import decimal
+from typing import Dict, Any, List
 
-logging.basicConfig(level=logging.INFO)
+class CryptoPrecisionScaler:
+    """
+    Uses decimal context manipulation to normalize arbitrary precision crypto pairs
+    without losing precision during cross-exchange arithmetic.
+    """
+    def __init__(self, target_precision: int = 8):
+        self.precision = target_precision
 
-def validate_ticker(ticker: str) -> bool:
-    return isinstance(ticker, str) and 2 <= len(ticker) <= 10 and ticker.isupper()
+    def normalize_orderbook(self, data: List[Dict[str, str]]) -> List[Dict[str, decimal.Decimal]]:
+        # using a context manager to enforce scale globally for this operation
+        with decimal.localcontext() as ctx:
+            ctx.prec = self.precision + 2
+            normalized = []
+            for entry in data:
+                # dict comprehension for performance optimization in tight loops
+                normalized.append({
+                    'price': decimal.Decimal(entry['price']),
+                    'size': decimal.Decimal(entry['size'])
+                })
+            return normalized
 
-def process_trade(payload: dict):
-    try:
-        ticker = payload.get('ticker')
-        amount = payload.get('amount')
+    def calculate_weighted_average(self, book: List[Dict[str, decimal.Decimal]]) -> decimal.Decimal:
+        if not book:
+            return decimal.Decimal('0')
         
-        if not validate_ticker(ticker):
-            raise ValueError(f'Invalid crypto ticker format: {ticker}')
+        total_val = sum(item['price'] * item['size'] for item in book)
+        total_size = sum(item['size'] for item in book)
         
-        if not (isinstance(amount, (int, float)) and amount > 0):
-            raise ValueError(f'Invalid trade amount: {amount}')
-            
-        logging.info(f'Executing order: {ticker} @ {amount}')
-    except ValueError as e:
-        logging.error(f'Validation rejection: {e}')
+        # division using high-precision arithmetic
+        return (total_val / total_size).quantize(
+            decimal.Decimal('1.' + '0' * self.precision),
+            rounding=decimal.ROUND_HALF_UP
+        )
 
-def main_loop():
-    # Simulate incoming crypto pipeline stream
-    data_stream = [
-        {'ticker': 'BTC', 'amount': 0.5},
-        {'ticker': 'bad_coin', 'amount': 100},
-        {'ticker': 'ETH', 'amount': -5}
-    ]
-    
-    for entry in data_stream:
-        process_trade(entry)
-        time.sleep(0.1)
-
-if __name__ == '__main__':
-    main_loop()
+# factory method to mimic constructor-style initialization
+def get_precision_processor(precision: int = 8) -> CryptoPrecisionScaler:
+    return CryptoPrecisionScaler(target_precision=precision)
