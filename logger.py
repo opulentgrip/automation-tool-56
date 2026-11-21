@@ -1,36 +1,32 @@
 import logging
-from logging.handlers import RotatingFileHandler
 import os
+from logging.handlers import RotatingFileHandler
 
-def get_crypto_logger(name='automation-tool-56', log_file='crypto_ops.log'):
+def get_crypto_logger(name='automation-tool-56', log_file='logs/app.log'):
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     
-    if not logger.handlers:
-        formatter = logging.Formatter(
-            '%(asctime)s | %(levelname)-8s | %(process)d | %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        
-        file_handler = RotatingFileHandler(
-            log_file, 
-            maxBytes=5 * 1024 * 1024, 
-            backupCount=3
-        )
-        file_handler.setFormatter(formatter)
-        
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
-        
+    formatter = logging.Formatter(
+        '[%(asctime)s] [%(levelname)s] [%(name)s] >> %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    # Console output for real-time monitoring
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+
+    # Rotating file handler (5MB per file, 3 backups)
+    file_handler = RotatingFileHandler(
+        log_file, 
+        maxBytes=5*1024*1024, 
+        backupCount=3
+    )
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
     return logger
 
-log = get_crypto_logger()
-
-def log_trade(symbol, side, price):
-    log.info(f'EXEC: {side.upper()} {symbol} at {price}')
-
-def log_alert(msg):
-    log.warning(f'ALERT: {msg}')
+logger = get_crypto_logger()
