@@ -1,55 +1,57 @@
-import re
-from typing import Dict, Any, Generator, Callable, List
+import hashlib
+import itertools
+from functools import wraps
+from typing import Any, Callable, Generator, List, Tuple
 
-ETH_ADDRESS_REGEX = re.compile(r"^0x[a-fA-F0-9]{40}$")
-VALID_ACTIONS = {"BUY", "SELL", "TRANSFER"}
 
-class PayloadValidationError(Exception):
-    """Raised when incoming crypto payload fails validation rules."""
+class UnitRegistry(type):
+    """Metaclass allowing dynamic crypto currency unit conversions via attribute access."""
+    _RATES = {
+        "sats_to_btc": 1e-8,
+        "btc_to_sats": 1e8,
+        "gwei_to_eth": 1e-9,
+        "eth_to_gwei": 1e9,
+        "wei_to_eth": 1e-18,
+        "eth_to_wei": 1e18,
+    }
+
+    def __getattr__(cls, name: str) -> Callable[[float], float]:
+        if name in cls._RATES:
+            return lambda val: float(val) * cls._RATES[name]
+        raise AttributeError(f"Conversion '{name}' is not supported.")
+
+
+class CryptoUnits(metaclass=UnitRegistry):
+    """Utility container leveraging dynamic attribute conversion."""
     pass
 
-def schema_guard(*validators: Callable[[Dict[str, Any]], bool]):
-    """Decorator pipeline enforcing input contract validation before processing."""
-    def decorator(func: Callable):
-        def wrapper(payload: Dict[str, Any]):
-            for validator in validators:
-                if not validator(payload):
-                    raise PayloadValidationError(f"Failed check: {validator.__name__}")
-            return func(payload)
+
+def chunk_address(address: str, group_size: int = 4, separator: str = ":") -> str:
+    """Format crypto address into visually distinctive chunks with custom checksum suffix."""
+    clean_addr = address.replace("0x", "")
+    chunks = [clean_addr[i:i + group_size] for i in range(0, len(clean_addr), group_size)]
+    formatted = separator.join(chunks)
+    digest = hashlib.blake2b(address.encode(), digest_size=2).hexdigest()
+    return f"{formatted}#{digest}"
+
+
+def rolling_price_delta(prices: List[float]) -> Generator[Tuple[float, float], None, None]:
+    """Yield percentage change and directional momentum from a stream of prices using pairwise iteration."""
+    a, b = itertools.tee(prices)
+    next(b, None)
+    for p1, p2 in zip(a, b):
+        delta = ((p2 - p1) / p1) * 100 if p1 != 0 else 0.0
+        momentum = 1.0 if delta > 0 else (-1.0 if delta < 0 else 0.0)
+        yield round(delta, 4), momentum
+
+
+def safe_gas_buffer(multiplier: float = 1.15):
+    """Decorator adjusting gas limit outputs dynamically based on volatile network simulation."""
+    def decorator(func: Callable[..., int]) -> Callable[..., int]:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> int:
+            base_gas = func(*args, **kwargs)
+            buffered = int(base_gas * multiplier)
+            return ((buffered + 999) // 1000) * 1000
         return wrapper
     return decorator
-
-def is_valid_address(data: Dict[str, Any]) -> bool:
-    addr = data.get("target_address", "")
-    return isinstance(addr, str) and bool(ETH_ADDRESS_REGEX.match(addr))
-
-def is_valid_amount(data: Dict[str, Any]) -> bool:
-    amount = data.get("amount")
-    return isinstance(amount, (int, float)) and 0.0001 <= amount <= 1000.0
-
-def is_valid_action(data: Dict[str, Any]) -> bool:
-    return data.get("action") in VALID_ACTIONS
-
-class CryptoLoopProcessor:
-    def __init__(self, raw_queue: List[Dict[str, Any]]):
-        self.raw_queue = raw_queue
-        self.processed_count = 0
-
-    @schema_guard(is_valid_address, is_valid_amount, is_valid_action)
-    def _execute_order(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        tx_hash = f"0x{abs(hash(str(payload))):016x}"
-        return {"status": "EXECUTED", "tx_hash": tx_hash, "payload": payload}
-
-    def run_processing_loop(self) -> Generator[Dict[str, Any], None, None]:
-        """Main processing loop consuming raw market triggers with dynamic validation."""
-        for raw_item in self.raw_queue:
-            if not isinstance(raw_item, dict):
-                yield {"status": "REJECTED", "reason": "Non-dictionary item in queue"}
-                continue
-            try:
-                sanitized = {str(k).strip().lower(): v for k, v in raw_item.items()}
-                result = self._execute_order(sanitized)
-                self.processed_count += 1
-                yield result
-            except PayloadValidationError as err:
-                yield {"status": "REJECTED", "reason": str(err), "raw": raw_item}
