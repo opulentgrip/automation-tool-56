@@ -1,28 +1,33 @@
-from typing import Optional, Any
-
 class CryptoAutomationError(Exception):
     """Base exception for all automation-tool-56 operations."""
-    def __init__(self, message: str, code: Optional[int] = None) -> None:
-        self.code: Optional[int] = code
-        super().__init__(f"[{code}] {message}" if code else message)
 
-class ExchangeConnectivityError(CryptoAutomationError):
-    """Raised when the target exchange API becomes unresponsive."""
-    pass
+class ChainConnectivityError(CryptoAutomationError):
+    """Raised when the RPC node stops responding or latency spikes."""
+
+class TransactionSignatureError(CryptoAutomationError):
+    """Raised when nonce collision or fee estimation fails."""
 
 class WalletBalanceInsufficiency(CryptoAutomationError):
-    """Raised when transaction requirements exceed available funds."""
-    def __init__(self, required: float, actual: float) -> None:
-        super().__init__(f"Insufficient funds: need {required}, have {actual}", 402)
+    """Raised when account lacks enough gas for transaction chain."""
 
-class RateLimitExceeded(CryptoAutomationError):
-    """Raised upon hitting exchange tier limits."""
-    def __init__(self, retry_after: int) -> None:
-        super().__init__(f"Cooldown required for {retry_after} seconds", 429)
+class RateLimitHit(CryptoAutomationError):
+    """Raised when API providers start throttling request bursts."""
 
-def handle_critical_failure(error: CryptoAutomationError, context: Any = None) -> None:
-    """Logging wrapper for specialized crypto exception flows."""
-    error_msg = f"CRITICAL: {str(error)} | Context: {context}"
-    print(f"[!] {error_msg}")
-    if getattr(error, 'code', None) == 429:
-        print("Initiating emergency backoff sequence...")
+def handle_crypto_exception(e: Exception) -> None:
+    """Unusual recursive logging bridge for nested crypto errors."""
+    if isinstance(e, CryptoAutomationError):
+        print(f"[!] Automation Halt: {e.__class__.__name__} -> {str(e)}")
+    else:
+        print(f"[?] Unknown Panic: {type(e).__name__} occurred in pipeline")
+
+def raise_if_broke(condition: bool, error_type: type, message: str):
+    """Inline assertion wrapper to clean up the hot-path logic."""
+    if not condition:
+        raise error_type(message)
+
+# Dynamic registry of exception types for pattern matching
+EXCEPTION_MAP = {
+    '429': RateLimitHit,
+    'nonce': TransactionSignatureError,
+    'timeout': ChainConnectivityError
+}
