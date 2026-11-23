@@ -1,32 +1,32 @@
 import logging
-import os
 from logging.handlers import RotatingFileHandler
+import os
 
-def get_crypto_logger(name='automation-tool-56', log_file='logs/app.log'):
-    os.makedirs(os.path.dirname(log_file), exist_ok=True)
-    
+def get_crypto_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     
+    if not os.path.exists('logs'):
+        os.makedirs('logs')
+        
     formatter = logging.Formatter(
-        '[%(asctime)s] [%(levelname)s] [%(name)s] >> %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s'
     )
 
-    # Console output for real-time monitoring
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-    logger.addHandler(stream_handler)
-
-    # Rotating file handler (5MB per file, 3 backups)
     file_handler = RotatingFileHandler(
-        log_file, 
-        maxBytes=5*1024*1024, 
+        'logs/automation-tool-56.log',
+        maxBytes=1048576 * 5,
         backupCount=3
     )
     file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-    
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+
+    if not logger.handlers:
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
+        
     return logger
 
-logger = get_crypto_logger()
+log = get_crypto_logger('crypto_bot')
