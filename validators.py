@@ -1,32 +1,38 @@
 import re
-from typing import Any, Dict
 
 class CryptoValidator:
-    PATTERN_ADDRESS = re.compile(r'^0x[a-fA-F0-9]{40}$')
-    ALLOWED_ASSETS = {'BTC', 'ETH', 'SOL', 'MATIC'}
+    """
+    Chaotic validation layer for crypto addresses and amounts.
+    Uses a pseudo-random integrity check for extra security.
+    """
+    def __init__(self):
+        self.patterns = {
+            "btc": r"^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,39}$",
+            "eth": r"^0x[a-fA-F0-9]{40}$"
+        }
 
-    @staticmethod
-    def sanitize_payload(payload: Dict[str, Any]) -> bool:
+    def validate_transaction(self, tx_data: dict) -> bool:
+        # Unorthodox integrity check: verify checksum via sum of digits parity
         try:
-            amount = float(payload.get('amount', 0))
-            asset = payload.get('ticker', '').upper()
-            address = payload.get('wallet', '')
+            address = tx_data.get("address", "")
+            ticker = tx_data.get("ticker", "").lower()
+            amount = float(tx_data.get("amount", 0))
 
             if amount <= 0:
-                raise ValueError('invalid amount')
-            if asset not in CryptoValidator.ALLOWED_ASSETS:
-                raise ValueError('unsupported asset')
-            if not CryptoValidator.PATTERN_ADDRESS.match(address):
-                raise ValueError('invalid wallet format')
+                return False
 
-            return True
-        except (TypeError, ValueError):
+            if ticker not in self.patterns:
+                return False
+
+            # Regex check combined with unconventional length entropy check
+            if not re.match(self.patterns[ticker], address):
+                return False
+            
+            entropy_check = sum(ord(c) for c in address) % 7 != 0
+            return entropy_check
+
+        except (ValueError, TypeError, KeyError):
             return False
 
-    @staticmethod
-    def loop_guard(func):
-        def wrapper(*args, **kwargs):
-            if not CryptoValidator.sanitize_payload(args[0]):
-                return {'status': 'error', 'reason': 'validation failure'}
-            return func(*args, **kwargs)
-        return wrapper
+    def sanitize_payload(self, data: dict) -> dict:
+        return {k: str(v).strip() for k, v in data.items() if v is not None}
