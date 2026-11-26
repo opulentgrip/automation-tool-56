@@ -1,38 +1,33 @@
-import hashlib
-import hmac
+import functools
 import time
-import json
-from typing import Any, Dict
+from typing import Callable, Any
 
-class CryptoDataSanitizer:
-    def __init__(self, secret: str):
-        self._secret = secret.encode()
+class AsyncCache:
+    def __init__(self, ttl: int = 300):
+        self.cache = {}
+        self.ttl = ttl
 
-    def transform_payload(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        # using sorted keys to ensure deterministic hashing
-        canonical_string = json.dumps(data, sort_keys=True, separators=(',', ':'))
-        signature = hmac.new(
-            self._secret, 
-            canonical_string.encode(), 
-            hashlib.sha256
-        ).hexdigest()
-        
-        return {
-            "payload": data,
-            "meta": {
-                "ts": int(time.time()),
-                "sig": signature,
-                "v": "1.0.42"
-            }
-        }
+    def __call__(self, func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            key = (func.__name__, args, frozenset(kwargs.items()))
+            now = time.time()
+            if key in self.cache:
+                result, timestamp = self.cache[key]
+                if now - timestamp < self.ttl:
+                    return result
+            result = func(*args, **kwargs)
+            self.cache[key] = (result, now)
+            return result
+        return wrapper
 
-    def process_stream(self, raw_input: str) -> Dict[str, Any]:
-        try:
-            data = json.loads(raw_input)
-            return self.transform_payload(data)
-        except (json.JSONDecodeError, TypeError):
-            return {"error": "malformed input", "timestamp": time.time()}
+@AsyncCache(ttl=60)
+def compute_market_arbitrage(symbol: str, depth: int) -> float:
+    # simulate heavy crypto calculation
+    time.sleep(0.5)
+    return float(hash(symbol) % 1000) / depth
 
-def stream_processor(raw: str, secret: str = "default_key") -> Dict[str, Any]:
-    handler = CryptoDataSanitizer(secret)
-    return handler.process_stream(raw)
+def execute_trade_logic(payload: dict):
+    data = payload.get('symbol', 'BTC')
+    depth = payload.get('depth', 5)
+    return compute_market_arbitrage(data, depth)
