@@ -1,38 +1,33 @@
-import functools
-import collections
+import hashlib
+import hmac
 import time
+from typing import Dict, Any, Union
 
-CACHE_SIZE = 1024
-EXPIRY_SECONDS = 30
+def sign_payload(secret: str, data: Dict[str, Any]) -> str:
+    """cryptographic signature generator for api auth"""
+    params = "&".join([f"{k}={v}" for k, v in sorted(data.items())])
+    return hmac.new(secret.encode(), params.encode(), hashlib.sha256).hexdigest()
 
-def fast_memoize(func):
-    cache = {}
-    expiry = {}
+def normalize_ticker(symbol: str) -> str:
+    """symbol normalization for cross-exchange consistency"""
+    return symbol.strip().upper().replace("/", "").replace("-", "")
 
-    @functools.wraps(func)
-    def wrapper(*args):
-        now = time.time()
-        if args in cache and (now - expiry.get(args, 0)) < EXPIRY_SECONDS:
-            return cache[args]
-        
-        result = func(*args)
-        cache[args] = result
-        expiry[args] = now
-        
-        if len(cache) > CACHE_SIZE:
-            oldest = next(iter(cache))
-            del cache[oldest]
-            del expiry[oldest]
-        return result
-    return wrapper
+def batch_process_stream(stream: list, chunk_size: int = 100):
+    """generator for segmented crypto data processing"""
+    for i in range(0, len(stream), chunk_size):
+        yield stream[i:i + chunk_size]
 
-def bulk_process_tickers(data: list, func) -> list:
-    # Using list comprehension for speed optimization on massive crypto payloads
-    # avoids overhead of explicit loops for tick transformations
-    return [func(item) for item in data if item is not None]
+def generate_nonce() -> int:
+    """microsecond precision nonce for order timing"""
+    return int(time.time() * 10**6)
 
-def dict_to_slots(cls):
-    # Inject slots to reduce memory footprint per object for large ticker sets
-    if '__slots__' not in cls.__dict__:
-        cls.__slots__ = [attr for attr in cls.__dict__.keys() if not attr.startswith('__')]
-    return cls
+def sanitize_price(value: Union[str, float, int]) -> float:
+    """robust casting for price field stability"""
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return 0.0
+
+def create_order_id(prefix: str = "at56") -> str:
+    """unique order identifier with timestamp salt"""
+    return f"{prefix}_{generate_nonce()}"
